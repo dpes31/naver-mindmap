@@ -411,8 +411,21 @@ function fetchNaverAutocomplete(keyword) {
   });
 }
 
-// 통합: 연관검색어 우선, 실패 시 자동완성
+// 통합: Vercel API → CORS 프록시 → 자동완성 순서로 시도
 async function fetchNaverKeywords(keyword) {
+  // 1순위: Vercel 서버리스 API (네이버 Search Ads — 진짜 연관검색어)
+  try {
+    const res = await fetch(
+      '/api/keywords?keyword=' + encodeURIComponent(keyword),
+      { signal: AbortSignal.timeout(10000) }
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (data.keywords && data.keywords.length >= 2) return data.keywords;
+    }
+  } catch(e) {}
+
+  // 2순위: CORS 프록시 (SERP 연관검색어)
   try {
     const kws = await fetchViaAllOrigins(keyword);
     if (kws.length >= 2) return kws;
@@ -423,7 +436,7 @@ async function fetchNaverKeywords(keyword) {
     if (kws.length >= 2) return kws;
   } catch(e) {}
 
-  // 프록시 모두 실패 시 자동완성으로 대체
+  // 최종 fallback: 자동완성
   return fetchNaverAutocomplete(keyword);
 }
 
