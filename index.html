@@ -271,36 +271,91 @@ const BRANCH_LIMITS = [Infinity, 10, 5, 3];
 const REQUEST_DELAY = 400;
 
 // ────────────────────────────────────────
-// 네이버 자동완성 API (JSONP — 서버 불필요)
+// 네이버 연관검색어 — CORS 프록시 + HTML 파싱
+// (자동완성 접두사 방식이 아닌 실제 연관검색어)
 // ────────────────────────────────────────
-function fetchNaverKeywords(keyword) {
+
+// 네이버 SERP HTML에서 연관검색어 파싱
+function parseRelatedFromHtml(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+
+  // CSS 셀렉터 다중 fallback (네이버 HTML 구조 변경 대응)
+  const SELECTORS = [
+    'a[href*="related_query"]',
+    '.lst_related_srch .tit',
+    '.related_srch a',
+    '#nx_related_kwd a',
+    'ul[class*="related"] li a',
+    '[class*="relatedKeyword"] a',
+    '[class*="related_keyword"] a',
+  ];
+  for (const sel of SELECTORS) {
+    const kws = [...doc.querySelectorAll(sel)]
+      .map(e => e.textContent.trim())
+      .filter(k => k.length > 0);
+    if (kws.length >= 2) return [...new Set(kws)].slice(0, 10);
+  }
+
+  // script 태그 내 JSON 데이터에서 추출 시도
+  for (const s of doc.querySelectorAll('script')) {
+    const t = s.textContent;
+    // "relatedKeywords":["a","b",...] 패턴
+    const m = t.match(/"relatedKeywords?":\s*\[([^\]]+)\]/);
+    if (m) {
+      const kws = [...m[1].matchAll(/"([^"]{1,30})"/g)].map(x => x[1]);
+      if (kws.length >= 2) return kws.slice(0, 10);
+    }
+    // "keywords":["a","b"] 패턴 (섹션 제한 위해 "related" 근처만)
+    if (t.includes('related') || t.includes('Related')) {
+      const m2 = t.match(/related[^"]*"keywords?":\s*\[([^\]]+)\]/i);
+      if (m2) {
+        const kws = [...m2[1].matchAll(/"([^"]{1,30})"/g)].map(x => x[1]);
+        if (kws.length >= 2) return kws.slice(0, 10);
+      }
+    }
+  }
+  return [];
+}
+
+// 1순위: AllOrigins 프록시
+async function fetchViaAllOrigins(keyword) {
+  const searchUrl = 'https://search.naver.com/search.naver?query=' + encodeURIComponent(keyword);
+  const proxyUrl  = 'https://api.allorigins.win/get?url=' + encodeURIComponent(searchUrl);
+  const res  = await fetch(proxyUrl, { signal: AbortSignal.timeout(9000) });
+  const json = await res.json();
+  return parseRelatedFromHtml(json.contents || '');
+}
+
+// 2순위: corsproxy.io
+async function fetchViaCorsproxy(keyword) {
+  const url = 'https://corsproxy.io/?' + encodeURIComponent(
+    'https://search.naver.com/search.naver?query=' + encodeURIComponent(keyword)
+  );
+  const res  = await fetch(url, { signal: AbortSignal.timeout(9000) });
+  const html = await res.text();
+  return parseRelatedFromHtml(html);
+}
+
+// 최종 fallback: 자동완성 JSONP
+function fetchNaverAutocomplete(keyword) {
   return new Promise((resolve) => {
     const cbName = '__naver_cb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
     const script = document.createElement('script');
-    const timer = setTimeout(() => {
-      cleanup();
-      resolve([]);
-    }, 6000);
-
+    const timer = setTimeout(() => { cleanup(); resolve([]); }, 6000);
     function cleanup() {
       clearTimeout(timer);
       try { document.head.removeChild(script); } catch(e) {}
       delete window[cbName];
     }
-
     window[cbName] = function(data) {
       cleanup();
       try {
-        // 네이버 자동완성 응답: { items: [[키워드, 타입, ...], ...], ... }
         const raw = data?.items?.[0] || [];
-        const keywords = raw.map(item => Array.isArray(item) ? item[0] : item)
-                            .filter(k => k && typeof k === 'string' && k.trim().length > 0);
-        resolve(keywords.slice(0, 10));
-      } catch(e) {
-        resolve([]);
-      }
+        const kws = raw.map(item => Array.isArray(item) ? item[0] : item)
+                       .filter(k => k && typeof k === 'string' && k.trim().length > 0);
+        resolve(kws.slice(0, 10));
+      } catch(e) { resolve([]); }
     };
-
     script.onerror = () => { cleanup(); resolve([]); };
     script.src = 'https://ac.search.naver.com/nx/ac'
       + '?q=' + encodeURIComponent(keyword)
@@ -309,6 +364,22 @@ function fetchNaverKeywords(keyword) {
       + '&_callback=' + cbName;
     document.head.appendChild(script);
   });
+}
+
+// 통합: 연관검색어 우선, 실패 시 자동완성
+async function fetchNaverKeywords(keyword) {
+  try {
+    const kws = await fetchViaAllOrigins(keyword);
+    if (kws.length >= 2) return kws;
+  } catch(e) {}
+
+  try {
+    const kws = await fetchViaCorsproxy(keyword);
+    if (kws.length >= 2) return kws;
+  } catch(e) {}
+
+  // 프록시 모두 실패 시 자동완성으로 대체
+  return fetchNaverAutocomplete(keyword);
 }
 
 // ────────────────────────────────────────
