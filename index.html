@@ -275,65 +275,110 @@ const REQUEST_DELAY = 400;
 // (자동완성 접두사 방식이 아닌 실제 연관검색어)
 // ────────────────────────────────────────
 
-// 네이버 SERP HTML에서 연관검색어 파싱
+// 네이버 SERP HTML에서 연관검색어 파싱 (다중 전략)
 function parseRelatedFromHtml(html) {
-  const doc = new DOMParser().parseFromString(html, 'text/html');
+  if (!html || html.length < 500) return [];
 
-  // CSS 셀렉터 다중 fallback (네이버 HTML 구조 변경 대응)
-  const SELECTORS = [
-    'a[href*="related_query"]',
-    '.lst_related_srch .tit',
-    '.related_srch a',
-    '#nx_related_kwd a',
-    'ul[class*="related"] li a',
-    '[class*="relatedKeyword"] a',
-    '[class*="related_keyword"] a',
-  ];
-  for (const sel of SELECTORS) {
-    const kws = [...doc.querySelectorAll(sel)]
-      .map(e => e.textContent.trim())
-      .filter(k => k.length > 0);
-    if (kws.length >= 2) return [...new Set(kws)].slice(0, 10);
-  }
-
-  // script 태그 내 JSON 데이터에서 추출 시도
-  for (const s of doc.querySelectorAll('script')) {
-    const t = s.textContent;
-    // "relatedKeywords":["a","b",...] 패턴
-    const m = t.match(/"relatedKeywords?":\s*\[([^\]]+)\]/);
-    if (m) {
-      const kws = [...m[1].matchAll(/"([^"]{1,30})"/g)].map(x => x[1]);
-      if (kws.length >= 2) return kws.slice(0, 10);
+  // Method 1: CSS 셀렉터 (DOM 파싱)
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const SELECTORS = [
+      'a[href*="related_query"]',
+      '.lst_related_srch .tit',
+      '.related_srch a',
+      '#nx_related_kwd a',
+      'ul[class*="related"] li a',
+      '[class*="relatedKeyword"] a',
+      '[class*="relate_kwd"] a',
+      '.keyword_box a',
+    ];
+    for (const sel of SELECTORS) {
+      const kws = [...doc.querySelectorAll(sel)]
+        .map(e => e.textContent.trim())
+        .filter(k => k.length >= 2 && k.length <= 40);
+      if (kws.length >= 2) return [...new Set(kws)].slice(0, 10);
     }
-    // "keywords":["a","b"] 패턴 (섹션 제한 위해 "related" 근처만)
-    if (t.includes('related') || t.includes('Related')) {
-      const m2 = t.match(/related[^"]*"keywords?":\s*\[([^\]]+)\]/i);
-      if (m2) {
-        const kws = [...m2[1].matchAll(/"([^"]{1,30})"/g)].map(x => x[1]);
-        if (kws.length >= 2) return kws.slice(0, 10);
+    // script 태그 JSON 패턴
+    for (const s of doc.querySelectorAll('script')) {
+      for (const pat of [
+        /"relatedKeywords?":\s*\[([^\]]+)\]/,
+        /"related_kwd[s]?":\s*\[([^\]]+)\]/,
+        /"relateKwds?":\s*\[([^\]]+)\]/,
+      ]) {
+        const m = s.textContent.match(pat);
+        if (m) {
+          const kws = [...m[1].matchAll(/"([^"]{2,40})"/g)].map(x => x[1]);
+          if (kws.length >= 2) return kws.slice(0, 10);
+        }
       }
     }
+  } catch(e) {}
+
+  // Method 2: Raw HTML 정규식 (셀렉터 실패 시 — JS 렌더링 페이지 대응)
+  try {
+    // href에 related_query 포함된 링크 텍스트 추출
+    const hrefs = [...html.matchAll(/related_query[^"]*"[^>]*>\s*([^<]{2,40})\s*<\/a>/g)]
+      .map(m => m[1].trim());
+    if (hrefs.length >= 2) return [...new Set(hrefs)].slice(0, 10);
+
+    // "연관검색어" 텍스트 주변 앵커 태그 추출
+    const idx = html.indexOf('연관검색어');
+    if (idx > 0) {
+      const section = html.slice(idx, idx + 4000);
+      const kws = [...section.matchAll(/<a[^>]*>\s*([^<]{2,30})\s*<\/a>/g)]
+        .map(m => m[1].trim())
+        .filter(k => k.length >= 2 && !k.startsWith('<'));
+      if (kws.length >= 2) return [...new Set(kws)].slice(0, 10);
+    }
+  } catch(e) {}
+
+  return [];
+}
+
+// 1순위: AllOrigins — 모바일 Naver 우선 (서버사이드 렌더링 비율 높음)
+async function fetchViaAllOrigins(keyword) {
+  const searchUrls = [
+    'https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(keyword),
+    'https://search.naver.com/search.naver?query=' + encodeURIComponent(keyword),
+  ];
+  for (const searchUrl of searchUrls) {
+    try {
+      const r = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(searchUrl),
+        { signal: AbortSignal.timeout(9000) });
+      if (r.ok) {
+        const kws = parseRelatedFromHtml(await r.text());
+        if (kws.length >= 2) return kws;
+      }
+    } catch(e) {}
+    try {
+      const r = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(searchUrl),
+        { signal: AbortSignal.timeout(9000) });
+      if (r.ok) {
+        const j = await r.json();
+        const kws = parseRelatedFromHtml(j.contents || '');
+        if (kws.length >= 2) return kws;
+      }
+    } catch(e) {}
   }
   return [];
 }
 
-// 1순위: AllOrigins 프록시
-async function fetchViaAllOrigins(keyword) {
-  const searchUrl = 'https://search.naver.com/search.naver?query=' + encodeURIComponent(keyword);
-  const proxyUrl  = 'https://api.allorigins.win/get?url=' + encodeURIComponent(searchUrl);
-  const res  = await fetch(proxyUrl, { signal: AbortSignal.timeout(9000) });
-  const json = await res.json();
-  return parseRelatedFromHtml(json.contents || '');
-}
-
-// 2순위: corsproxy.io
+// 2순위: corsproxy.io + cors.sh — 모바일 URL 사용
 async function fetchViaCorsproxy(keyword) {
-  const url = 'https://corsproxy.io/?' + encodeURIComponent(
-    'https://search.naver.com/search.naver?query=' + encodeURIComponent(keyword)
-  );
-  const res  = await fetch(url, { signal: AbortSignal.timeout(9000) });
-  const html = await res.text();
-  return parseRelatedFromHtml(html);
+  const mobileUrl = 'https://m.search.naver.com/search.naver?where=m&query=' + encodeURIComponent(keyword);
+  for (const proxyUrl of [
+    'https://corsproxy.io/?' + encodeURIComponent(mobileUrl),
+    'https://proxy.cors.sh/' + mobileUrl,
+  ]) {
+    try {
+      const r = await fetch(proxyUrl, { signal: AbortSignal.timeout(9000) });
+      if (r.ok) {
+        const kws = parseRelatedFromHtml(await r.text());
+        if (kws.length >= 2) return kws;
+      }
+    } catch(e) {}
+  }
+  return [];
 }
 
 // 최종 fallback: 자동완성 JSONP
