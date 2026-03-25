@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-간략히 보기
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>네이버 연관검색어 마인드맵</title>
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
     :root {
       --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', system-ui, sans-serif;
       --bg-start: #ffffff;
@@ -20,6 +20,7 @@
       --text-primary: #1d1d1f;
       --text-muted: rgba(29, 29, 31, 0.5);
     }
+
     html, body {
       height: 100%;
       overflow: hidden;
@@ -27,6 +28,7 @@
       background: linear-gradient(135deg, var(--bg-start) 0%, var(--bg-mid) 55%, var(--bg-end) 100%);
       color: var(--text-primary);
     }
+
     /* ── 헤더 ── */
     header {
       position: fixed;
@@ -43,6 +45,7 @@
       gap: 20px;
       flex-wrap: wrap;
     }
+
     .brand {
       font-size: 15px;
       font-weight: 600;
@@ -51,12 +54,14 @@
       white-space: nowrap;
     }
     .brand span { color: var(--accent); }
+
     .search-wrap {
       display: flex;
       gap: 8px;
       flex: 1;
       max-width: 480px;
     }
+
     #searchInput {
       flex: 1;
       padding: 9px 16px;
@@ -74,6 +79,7 @@
       border-color: var(--accent);
       box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.12);
     }
+
     #searchBtn {
       padding: 9px 20px;
       border: none;
@@ -90,6 +96,7 @@
     #searchBtn:hover { background: #1648c0; }
     #searchBtn:active { transform: scale(0.97); }
     #searchBtn:disabled { background: #a0aec0; cursor: not-allowed; }
+
     .legend {
       display: flex;
       gap: 12px;
@@ -109,11 +116,13 @@
       border-radius: 50%;
       border: 1.5px solid rgba(255,255,255,0.6);
     }
+
     #graph {
       position: fixed;
       top: 0; left: 0;
       width: 100%; height: 100%;
     }
+
     /* ── 로딩 ── */
     #loading {
       display: none;
@@ -144,6 +153,7 @@
       color: var(--text-muted);
       font-weight: 500;
     }
+
     /* ── 빈 상태 ── */
     #empty-state {
       position: fixed;
@@ -160,6 +170,7 @@
       margin-bottom: 8px; letter-spacing: -0.3px;
     }
     .empty-sub { font-size: 14px; color: var(--text-muted); }
+
     /* ── 토스트 ── */
     #toast {
       position: fixed;
@@ -175,15 +186,10 @@
       pointer-events: none; z-index: 200;
     }
     #toast.show { transform: translateX(-50%) translateY(0); }
-    /* ── 노드 애니메이션 ── */
-    @keyframes fadeSlideUp {
-      from { opacity: 0; transform: translateY(20px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-    .node-group {
-      animation: fadeSlideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-    }
+
+    /* ── 노드 애니메이션 (opacity만 — transform 충돌 방지) ── */
     @keyframes spin { to { transform: rotate(360deg); } }
+
     #tooltip {
       position: fixed; pointer-events: none;
       background: var(--glass-bg);
@@ -196,6 +202,7 @@
       opacity: 0; transition: opacity 0.15s; z-index: 300;
     }
     #tooltip.visible { opacity: 1; }
+
     #info-panel {
       position: fixed; bottom: 24px; right: 24px;
       background: var(--glass-bg);
@@ -220,6 +227,7 @@
   </style>
 </head>
 <body>
+
 <header>
   <div class="brand">Naver <span>MindMap</span></div>
   <div class="search-wrap">
@@ -233,19 +241,24 @@
     <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div>3차</div>
   </div>
 </header>
+
 <svg id="graph"></svg>
+
 <div id="loading">
   <div class="spinner"></div>
   <p id="loading-text">연관 검색어 수집 중...</p>
 </div>
+
 <div id="empty-state">
   <div class="empty-icon">🔍</div>
   <div class="empty-title">키워드를 검색하세요</div>
   <div class="empty-sub">네이버 연관 검색어를 마인드맵으로 시각화합니다</div>
 </div>
+
 <div id="toast"></div>
 <div id="tooltip"></div>
 <div id="info-panel"></div>
+
 <script>
 // ────────────────────────────────────────
 // 설정
@@ -256,6 +269,7 @@ const DEPTH_OPACITY = [1, 0.92, 0.85, 0.78];
 const MAX_DEPTH     = 2;
 const BRANCH_LIMITS = [Infinity, 10, 5, 3];
 const REQUEST_DELAY = 400;
+
 // ────────────────────────────────────────
 // 네이버 자동완성 API (JSONP — 서버 불필요)
 // ────────────────────────────────────────
@@ -267,11 +281,13 @@ function fetchNaverKeywords(keyword) {
       cleanup();
       resolve([]);
     }, 6000);
+
     function cleanup() {
       clearTimeout(timer);
       try { document.head.removeChild(script); } catch(e) {}
       delete window[cbName];
     }
+
     window[cbName] = function(data) {
       cleanup();
       try {
@@ -284,6 +300,7 @@ function fetchNaverKeywords(keyword) {
         resolve([]);
       }
     };
+
     script.onerror = () => { cleanup(); resolve([]); };
     script.src = 'https://ac.search.naver.com/nx/ac'
       + '?q=' + encodeURIComponent(keyword)
@@ -293,13 +310,16 @@ function fetchNaverKeywords(keyword) {
     document.head.appendChild(script);
   });
 }
+
 // ────────────────────────────────────────
 // D3 초기화
 // ────────────────────────────────────────
 const svg = d3.select('#graph');
 let width  = window.innerWidth;
 let height = window.innerHeight;
+
 const defs = svg.append('defs');
+
 // Glow 필터
 const glow = defs.append('filter')
   .attr('id', 'glow').attr('x', '-50%').attr('y', '-50%')
@@ -308,6 +328,7 @@ glow.append('feGaussianBlur').attr('stdDeviation', '4').attr('result', 'coloredB
 const fm = glow.append('feMerge');
 fm.append('feMergeNode').attr('in', 'coloredBlur');
 fm.append('feMergeNode').attr('in', 'SourceGraphic');
+
 // 깊이별 방사형 그라디언트
 function lighten(hex, a) {
   const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
@@ -321,13 +342,16 @@ DEPTH_COLORS.forEach((color, i) => {
   gr.append('stop').attr('offset','100%')
     .attr('stop-color', color).attr('stop-opacity', DEPTH_OPACITY[i]);
 });
+
 // 줌/패닝
 const zoomG = svg.append('g').attr('id', 'zoom-layer');
 const zoom = d3.zoom().scaleExtent([0.2, 4])
   .on('zoom', e => zoomG.attr('transform', e.transform));
 svg.call(zoom).on('dblclick.zoom', null);
+
 const linksG = zoomG.append('g').attr('id', 'links');
 const nodesG = zoomG.append('g').attr('id', 'nodes');
+
 // 시뮬레이션
 const simulation = d3.forceSimulation()
   .force('link', d3.forceLink().id(d => d.id)
@@ -336,10 +360,12 @@ const simulation = d3.forceSimulation()
   .force('center', d3.forceCenter(width/2, height/2))
   .force('collision', d3.forceCollide().radius(d => DEPTH_RADIUS[Math.min(d.depth,3)] + 18))
   .alphaDecay(0.03);
+
 // 상태
 let nodes = [], links = [];
 const nodeIds = new Set();
 let isLoading = false;
+
 // ────────────────────────────────────────
 // UI 유틸
 // ────────────────────────────────────────
@@ -349,6 +375,7 @@ const emptyState  = document.getElementById('empty-state');
 const toastEl     = document.getElementById('toast');
 const tooltipEl   = document.getElementById('tooltip');
 const infoPanelEl = document.getElementById('info-panel');
+
 let toastTimer;
 function showToast(msg) {
   clearTimeout(toastTimer);
@@ -356,12 +383,14 @@ function showToast(msg) {
   toastEl.classList.add('show');
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), 3500);
 }
+
 function setLoading(active, text='연관 검색어 수집 중...') {
   isLoading = active;
   loadingText.textContent = text;
   loadingEl.classList.toggle('active', active);
   document.getElementById('searchBtn').disabled = active;
 }
+
 // ────────────────────────────────────────
 // 그래프 렌더링
 // ────────────────────────────────────────
@@ -374,10 +403,12 @@ function updateGraph() {
     .attr('stroke-width', 1.5)
     .attr('stroke-linecap','round');
   link.exit().remove();
+
   // 노드 그룹
   const node = nodesG.selectAll('g.node-group').data(nodes, d => d.id);
   const enter = node.enter().append('g')
     .attr('class','node-group')
+    .style('opacity', 0)          // 초기 투명 — CSS transform 충돌 없음
     .style('cursor','pointer')
     .call(d3.drag()
       .on('start', (e,d) => { if(!e.active) simulation.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
@@ -386,17 +417,20 @@ function updateGraph() {
     .on('mouseenter', onHover)
     .on('mouseleave', onLeave)
     .on('click', onClick);
+
   // 글로우 원
   enter.append('circle').attr('class','node-glow')
     .attr('r', d => DEPTH_RADIUS[Math.min(d.depth,3)] + 8)
     .attr('fill', d => DEPTH_COLORS[Math.min(d.depth,3)])
     .attr('fill-opacity', 0.08).attr('stroke','none');
+
   // 메인 원
   enter.append('circle').attr('class','node-circle')
     .attr('r', d => DEPTH_RADIUS[Math.min(d.depth,3)])
     .attr('fill', d => `url(#grad-${Math.min(d.depth,3)})`)
     .attr('stroke','rgba(255,255,255,0.65)')
     .attr('stroke-width', d => d.depth===0 ? 3 : 2);
+
   // 라벨
   enter.append('text').attr('class','node-label')
     .attr('text-anchor','middle').attr('dominant-baseline','central')
@@ -406,11 +440,17 @@ function updateGraph() {
     .attr('font-family','-apple-system, BlinkMacSystemFont, system-ui, sans-serif')
     .attr('pointer-events','none')
     .text(d => trunc(d.label, d.depth===0 ? 10 : 7));
+
+  // 새 노드 fade-in (opacity만 — transform은 D3 tick이 관리)
+  enter.transition().duration(450).ease(d3.easeCubicOut).style('opacity', 1);
+
   node.exit().remove();
+
   simulation.nodes(nodes);
   simulation.force('link').links(links);
   simulation.force('center', d3.forceCenter(width/2, height/2));
   simulation.alpha(0.5).restart();
+
   simulation.on('tick', () => {
     linksG.selectAll('line')
       .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
@@ -419,7 +459,9 @@ function updateGraph() {
       .attr('transform', d => `translate(${d.x},${d.y})`);
   });
 }
+
 function trunc(s, n) { return s.length <= n ? s : s.slice(0,n) + '…'; }
+
 // ────────────────────────────────────────
 // 호버 / 클릭
 // ────────────────────────────────────────
@@ -450,18 +492,23 @@ function onClick(e, d) {
 }
 svg.on('click', () => infoPanelEl.classList.remove('visible'));
 window.reSearch = (kw) => { document.getElementById('searchInput').value = kw; startSearch(kw); };
+
 // ────────────────────────────────────────
 // 재귀 탐색 (fire-and-forget)
 // ────────────────────────────────────────
 async function expandNode(keyword, parentId, depth) {
   if (depth > MAX_DEPTH) return;
   if (nodes.length > 250) return;
+
   let related;
   try { related = await fetchNaverKeywords(keyword); }
   catch(e) { return; }
+
   if (!related || related.length === 0) return;
+
   const toExpand = [];
   const maxKids = BRANCH_LIMITS[depth] ?? 3;
+
   related.slice(0, maxKids).forEach(kw => {
     const id = kw.toLowerCase().trim();
     if (nodeIds.has(id)) {
@@ -479,28 +526,35 @@ async function expandNode(keyword, parentId, depth) {
     links.push({ source: parentId, target: id });
     toExpand.push({ id, label: kw });
   });
+
   updateGraph();
+
   // 자식은 순차적으로 지연 실행 (rate-limit 보호)
   toExpand.forEach((child, i) => {
     setTimeout(() => expandNode(child.label, child.id, depth + 1), i * REQUEST_DELAY);
   });
 }
+
 // ────────────────────────────────────────
 // 검색 시작
 // ────────────────────────────────────────
 async function startSearch(keyword) {
   if (!keyword || isLoading) return;
   keyword = keyword.trim();
+
   nodes = []; links = []; nodeIds.clear();
   linksG.selectAll('*').remove();
   nodesG.selectAll('*').remove();
   infoPanelEl.classList.remove('visible');
   emptyState.classList.add('hidden');
+
   const rootId = keyword.toLowerCase();
   nodeIds.add(rootId);
   nodes.push({ id: rootId, label: keyword, depth: 0, fx: width/2, fy: height/2 });
   updateGraph();
+
   setLoading(true, `"${keyword}" 연관검색어 수집 중...`);
+
   try {
     await expandNode(keyword, rootId, 1);
   } catch(e) {
@@ -512,6 +566,7 @@ async function startSearch(keyword) {
     }
   }
 }
+
 // ────────────────────────────────────────
 // 이벤트
 // ────────────────────────────────────────
@@ -532,3 +587,4 @@ window.addEventListener('resize', () => {
 svg.call(zoom.transform, d3.zoomIdentity);
 </script>
 </body>
+</html>
