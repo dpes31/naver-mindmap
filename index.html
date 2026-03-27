@@ -29,6 +29,8 @@
       color: var(--text-primary);
     }
 
+    header { height: 56px; }
+
     /* ── 헤더 ── */
     header {
       position: fixed;
@@ -117,10 +119,113 @@
       border: 1.5px solid rgba(255,255,255,0.6);
     }
 
+    /* ── 통계 패널 ── */
+    #stats-panel {
+      position: fixed;
+      top: 56px; left: 0; right: 0;
+      z-index: 90;
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border-bottom: 1px solid var(--glass-border);
+      box-shadow: var(--glass-shadow);
+      overflow: hidden;
+      transition: max-height 0.35s ease, opacity 0.35s ease;
+      max-height: 180px;
+      opacity: 1;
+    }
+    #stats-panel.collapsed {
+      max-height: 0;
+      opacity: 0;
+    }
+    #stats-inner {
+      padding: 12px 24px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .stats-title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 2px;
+    }
+    .stats-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+    .stats-keyword {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .stats-chart-wrap {
+      display: flex;
+      gap: 32px;
+      align-items: flex-end;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+    .stat-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      min-width: 40px;
+    }
+    .stat-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      max-width: 60px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .stat-bars {
+      display: flex;
+      gap: 2px;
+      align-items: flex-end;
+      height: 50px;
+    }
+    .stat-bar {
+      width: 8px;
+      border-radius: 3px 3px 0 0;
+      transition: height 0.4s ease;
+    }
+    .stat-bar.pc   { background: #1a56db; }
+    .stat-bar.mob  { background: #22c55e; }
+    .stat-val {
+      font-size: 9px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    /* 통계 토글 버튼 */
+    #stats-toggle {
+      position: fixed;
+      z-index: 91;
+      right: 16px;
+      top: 58px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      padding: 3px 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+      cursor: pointer;
+      backdrop-filter: blur(12px);
+      transition: top 0.35s ease;
+    }
+    #stats-toggle:hover { color: var(--text-primary); }
+
     #graph {
       position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
+      left: 0;
+      width: 100%;
+      transition: top 0.35s ease, height 0.35s ease;
     }
 
     /* ── 로딩 ── */
@@ -242,6 +347,21 @@
   </div>
 </header>
 
+<div id="stats-panel">
+  <div id="stats-inner">
+    <div class="stats-title-row">
+      <span class="stats-title">월간 검색량</span>
+      <span class="stats-keyword" id="stats-kw-label"></span>
+      <span class="stats-title" style="margin-left:16px">■ PC</span>
+      <span style="font-size:11px;color:#1a56db;font-weight:600">■</span>
+      <span class="stats-title">Mobile</span>
+      <span style="font-size:11px;color:#22c55e;font-weight:600">■</span>
+    </div>
+    <div class="stats-chart-wrap" id="stats-chart"></div>
+  </div>
+</div>
+<button id="stats-toggle" onclick="toggleStats()">통계 접기 ▲</button>
+
 <svg id="graph"></svg>
 
 <div id="loading">
@@ -264,11 +384,11 @@
 // 설정
 // ────────────────────────────────────────
 const DEPTH_COLORS  = ['#1a56db', '#22c55e', '#f59e0b', '#f97316'];
-const DEPTH_RADIUS  = [38, 28, 22, 18];
+const DEPTH_RADIUS  = [42, 30, 22, 16];
 const DEPTH_OPACITY = [1, 0.92, 0.85, 0.78];
-const MAX_DEPTH     = 2;
-const BRANCH_LIMITS = [Infinity, 10, 5, 3];
-const REQUEST_DELAY = 400;
+const MAX_DEPTH     = 3;
+const BRANCH_LIMITS = [Infinity, 8, 4, 2];
+const TRUNC_LEN     = [8, 6, 5, 4];
 
 // ────────────────────────────────────────
 // 네이버 연관검색어 — CORS 프록시 + HTML 파싱
@@ -411,9 +531,17 @@ function fetchNaverAutocomplete(keyword) {
   });
 }
 
+// stats 객체로 래핑 (string fallback용)
+function wrapStrings(arr) {
+  return arr.map(k => typeof k === 'string'
+    ? { keyword:k, totalVol:0, pcVol:0, mobileVol:0, pcClicks:0, mobileClicks:0, pcCtr:0, mobileCtr:0 }
+    : k);
+}
+
 // 통합: Vercel API → CORS 프록시 → 자동완성 순서로 시도
+// 반환: [{keyword, totalVol, pcVol, mobileVol, pcClicks, mobileClicks, pcCtr, mobileCtr}, ...]
 async function fetchNaverKeywords(keyword) {
-  // 1순위: Vercel 서버리스 API (네이버 Search Ads — 진짜 연관검색어)
+  // 1순위: Vercel 서버리스 API (네이버 Search Ads — 진짜 연관검색어 + 검색량)
   try {
     const res = await fetch(
       '/api/keywords?keyword=' + encodeURIComponent(keyword),
@@ -425,19 +553,86 @@ async function fetchNaverKeywords(keyword) {
     }
   } catch(e) {}
 
-  // 2순위: CORS 프록시 (SERP 연관검색어)
+  // 2순위: CORS 프록시 (SERP 연관검색어 — 검색량 없음)
   try {
     const kws = await fetchViaAllOrigins(keyword);
-    if (kws.length >= 2) return kws;
+    if (kws.length >= 2) return wrapStrings(kws);
   } catch(e) {}
 
   try {
     const kws = await fetchViaCorsproxy(keyword);
-    if (kws.length >= 2) return kws;
+    if (kws.length >= 2) return wrapStrings(kws);
   } catch(e) {}
 
   // 최종 fallback: 자동완성
-  return fetchNaverAutocomplete(keyword);
+  return wrapStrings(await fetchNaverAutocomplete(keyword));
+}
+
+// ────────────────────────────────────────
+// 검색량 기반 노드 반경 계산
+// ────────────────────────────────────────
+function nodeRadius(d) {
+  const base = DEPTH_RADIUS[Math.min(d.depth, 3)];
+  if (!d.totalVol) return base;
+  const sameDepth = nodes.filter(n => n.depth === d.depth && n.totalVol > 0);
+  if (sameDepth.length === 0) return base;
+  const maxVol = Math.max(...sameDepth.map(n => n.totalVol), 1);
+  const scale = Math.log1p(d.totalVol) / Math.log1p(maxVol); // 0~1
+  return Math.max(10, base + (scale - 0.5) * 12);
+}
+
+// 연결선 두께 계산
+function linkWidth(d) {
+  const tid = d.target?.id || d.target;
+  const t = nodes.find(n => n.id === tid);
+  if (!t?.totalVol) return 1.5;
+  return Math.max(1, Math.min(6, 1 + Math.log1p(t.totalVol) / 3));
+}
+
+// ────────────────────────────────────────
+// BFS 전수 수집 후 일괄 렌더
+// ────────────────────────────────────────
+async function collectAll(rootKeyword, rootId) {
+  const queue = [{ kw: rootKeyword, parentId: rootId, depth: 1 }];
+  let processed = 0;
+
+  while (queue.length > 0 && nodes.length < 300) {
+    const batch = queue.splice(0, 5);
+    const results = await Promise.allSettled(
+      batch.map(item => fetchNaverKeywords(item.kw))
+    );
+
+    results.forEach((r, i) => {
+      processed++;
+      setLoading(true, `${processed}개 키워드 수집 중...`);
+      if (r.status !== 'fulfilled') return;
+
+      const { parentId, depth } = batch[i];
+      const maxKids = BRANCH_LIMITS[depth] ?? 2;
+      const items = r.value.slice(0, maxKids);
+
+      items.forEach(item => {
+        const id = item.keyword.toLowerCase().trim();
+        if (!id) return;
+
+        if (nodeIds.has(id)) {
+          if (!links.find(l => (l.source?.id||l.source)===parentId && (l.target?.id||l.target)===id))
+            links.push({ source: parentId, target: id });
+          return;
+        }
+        nodeIds.add(id);
+        nodes.push({ id, label: item.keyword, depth,
+          totalVol: item.totalVol||0, pcVol: item.pcVol||0,
+          mobileVol: item.mobileVol||0, pcClicks: item.pcClicks||0,
+          mobileClicks: item.mobileClicks||0, pcCtr: item.pcCtr||0,
+          mobileCtr: item.mobileCtr||0 });
+        links.push({ source: parentId, target: id });
+
+        if (depth < MAX_DEPTH)
+          queue.push({ kw: item.keyword, parentId: id, depth: depth + 1 });
+      });
+    });
+  }
 }
 
 // ────────────────────────────────────────
@@ -527,17 +722,17 @@ function updateGraph() {
   // 연결선
   const link = linksG.selectAll('line')
     .data(links, d => `${d.source?.id||d.source}→${d.target?.id||d.target}`);
-  link.enter().append('line')
-    .attr('stroke','rgba(120,140,160,0.2)')
-    .attr('stroke-width', 1.5)
+  const linkEnter = link.enter().append('line')
+    .attr('stroke','rgba(120,140,160,0.25)')
     .attr('stroke-linecap','round');
+  // 두께는 데이터 바인딩 후 nodes가 채워진 뒤에 설정
   link.exit().remove();
 
   // 노드 그룹
   const node = nodesG.selectAll('g.node-group').data(nodes, d => d.id);
   const enter = node.enter().append('g')
     .attr('class','node-group')
-    .style('opacity', 0)          // 초기 투명 — CSS transform 충돌 없음
+    .style('opacity', 0)
     .style('cursor','pointer')
     .call(d3.drag()
       .on('start', (e,d) => { if(!e.active) simulation.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
@@ -549,36 +744,41 @@ function updateGraph() {
 
   // 글로우 원
   enter.append('circle').attr('class','node-glow')
-    .attr('r', d => DEPTH_RADIUS[Math.min(d.depth,3)] + 8)
+    .attr('r', d => nodeRadius(d) + 8)
     .attr('fill', d => DEPTH_COLORS[Math.min(d.depth,3)])
     .attr('fill-opacity', 0.08).attr('stroke','none');
 
   // 메인 원
   enter.append('circle').attr('class','node-circle')
-    .attr('r', d => DEPTH_RADIUS[Math.min(d.depth,3)])
+    .attr('r', d => nodeRadius(d))
     .attr('fill', d => `url(#grad-${Math.min(d.depth,3)})`)
     .attr('stroke','rgba(255,255,255,0.65)')
     .attr('stroke-width', d => d.depth===0 ? 3 : 2);
 
-  // 라벨
+  // 라벨 — 다크 텍스트 + 흰 아웃라인
   enter.append('text').attr('class','node-label')
     .attr('text-anchor','middle').attr('dominant-baseline','central')
-    .attr('fill','rgba(255,255,255,0.95)')
+    .attr('fill','#1d1d1f')
+    .attr('stroke','rgba(255,255,255,0.9)')
+    .attr('stroke-width', 3)
+    .attr('paint-order','stroke')
     .attr('font-size', d => d.depth===0 ? '13px' : d.depth===1 ? '11px' : '10px')
     .attr('font-weight', d => d.depth===0 ? '700' : '500')
     .attr('font-family','-apple-system, BlinkMacSystemFont, system-ui, sans-serif')
     .attr('pointer-events','none')
-    .text(d => trunc(d.label, d.depth===0 ? 10 : 7));
+    .text(d => trunc(d.label, TRUNC_LEN[Math.min(d.depth,3)]));
 
-  // 새 노드 fade-in (opacity만 — transform은 D3 tick이 관리)
   enter.transition().duration(450).ease(d3.easeCubicOut).style('opacity', 1);
-
   node.exit().remove();
 
   simulation.nodes(nodes);
   simulation.force('link').links(links);
+  simulation.force('collision').radius(d => nodeRadius(d) + 14);
   simulation.force('center', d3.forceCenter(width/2, height/2));
   simulation.alpha(0.5).restart();
+
+  // 연결선 두께 업데이트 (nodes 바인딩 후)
+  linksG.selectAll('line').attr('stroke-width', d => linkWidth(d));
 
   simulation.on('tick', () => {
     linksG.selectAll('line')
@@ -587,6 +787,76 @@ function updateGraph() {
     nodesG.selectAll('g.node-group')
       .attr('transform', d => `translate(${d.x},${d.y})`);
   });
+}
+
+// ────────────────────────────────────────
+// 통계 패널 렌더
+// ────────────────────────────────────────
+function renderStats(keyword, items) {
+  document.getElementById('stats-kw-label').textContent = keyword;
+  const container = document.getElementById('stats-chart');
+  container.innerHTML = '';
+
+  const valid = items.filter(d => d.totalVol > 0).slice(0, 10);
+  if (valid.length === 0) {
+    container.innerHTML = '<span style="font-size:12px;color:var(--text-muted)">검색량 데이터 없음 (API 키 미설정 시 표시 안됨)</span>';
+    return;
+  }
+
+  const maxVol = Math.max(...valid.map(d => d.pcVol + d.mobileVol), 1);
+  const BAR_H = 50;
+
+  valid.forEach(d => {
+    const pcH  = Math.max(2, Math.round((d.pcVol / maxVol) * BAR_H));
+    const mobH = Math.max(2, Math.round((d.mobileVol / maxVol) * BAR_H));
+    const total = (d.totalVol >= 10000)
+      ? Math.round(d.totalVol/1000) + 'k'
+      : d.totalVol.toLocaleString();
+
+    const col = document.createElement('div');
+    col.className = 'stat-col';
+    col.title = `${d.keyword}\nPC: ${d.pcVol.toLocaleString()}\nMobile: ${d.mobileVol.toLocaleString()}\n클릭수: ${(d.pcClicks+d.mobileClicks).toLocaleString()}\nCTR: PC ${d.pcCtr}% / Mobile ${d.mobileCtr}%`;
+    col.innerHTML = `
+      <div class="stat-bars">
+        <div class="stat-bar pc"  style="height:${pcH}px"></div>
+        <div class="stat-bar mob" style="height:${mobH}px"></div>
+      </div>
+      <div class="stat-val">${total}</div>
+      <div class="stat-label">${d.keyword}</div>`;
+    container.appendChild(col);
+  });
+}
+
+let statsVisible = true;
+function toggleStats() {
+  statsVisible = !statsVisible;
+  const panel = document.getElementById('stats-panel');
+  const btn   = document.getElementById('stats-toggle');
+  const hdrH  = 56;
+  if (statsVisible) {
+    panel.classList.remove('collapsed');
+    btn.textContent = '통계 접기 ▲';
+    setTimeout(adjustGraphTop, 350);
+  } else {
+    panel.classList.add('collapsed');
+    btn.textContent = '통계 펼치기 ▼';
+    adjustGraphTop();
+  }
+}
+function adjustGraphTop() {
+  const hdrH   = 56;
+  const panel  = document.getElementById('stats-panel');
+  const toggle = document.getElementById('stats-toggle');
+  const panelH = statsVisible ? panel.scrollHeight : 0;
+  const graphTop = hdrH + panelH;
+  const graph = document.getElementById('graph');
+  graph.style.top    = graphTop + 'px';
+  graph.style.height = (window.innerHeight - graphTop) + 'px';
+  toggle.style.top   = (hdrH + 2) + 'px';
+  // 시뮬레이션 중심 재조정
+  width  = window.innerWidth;
+  height = window.innerHeight - graphTop;
+  simulation.force('center', d3.forceCenter(width/2, height/2)).alpha(0.1).restart();
 }
 
 function trunc(s, n) { return s.length <= n ? s : s.slice(0,n) + '…'; }
@@ -616,56 +886,19 @@ function onLeave(e, d) {
 function onClick(e, d) {
   e.stopPropagation();
   if (isLoading) return;
-  infoPanelEl.innerHTML = `<strong>${d.label}</strong>${d.depth}차 연관어<div class="hint" onclick="reSearch('${d.label.replace(/'/g,"\\'")}')">이 키워드로 새 검색 →</div>`;
+  const vol = d.totalVol ? `<div style="margin-top:6px;font-size:12px">
+    <span style="color:#1a56db">PC ${(d.pcVol||0).toLocaleString()}</span> &nbsp;
+    <span style="color:#22c55e">Mobile ${(d.mobileVol||0).toLocaleString()}</span><br>
+    클릭수 ${((d.pcClicks||0)+(d.mobileClicks||0)).toLocaleString()} &nbsp; CTR ${d.pcCtr||0}%/${d.mobileCtr||0}%
+  </div>` : '';
+  infoPanelEl.innerHTML = `<strong>${d.label}</strong>${d.depth}차 연관어${vol}<div class="hint" onclick="reSearch('${d.label.replace(/'/g,"\\'")}')">이 키워드로 새 검색 →</div>`;
   infoPanelEl.classList.add('visible');
 }
 svg.on('click', () => infoPanelEl.classList.remove('visible'));
 window.reSearch = (kw) => { document.getElementById('searchInput').value = kw; startSearch(kw); };
 
 // ────────────────────────────────────────
-// 재귀 탐색 (fire-and-forget)
-// ────────────────────────────────────────
-async function expandNode(keyword, parentId, depth) {
-  if (depth > MAX_DEPTH) return;
-  if (nodes.length > 250) return;
-
-  let related;
-  try { related = await fetchNaverKeywords(keyword); }
-  catch(e) { return; }
-
-  if (!related || related.length === 0) return;
-
-  const toExpand = [];
-  const maxKids = BRANCH_LIMITS[depth] ?? 3;
-
-  related.slice(0, maxKids).forEach(kw => {
-    const id = kw.toLowerCase().trim();
-    if (nodeIds.has(id)) {
-      // 이미 있는 노드면 링크만 추가
-      const linkExists = links.find(l =>
-        (l.source?.id||l.source)===parentId && (l.target?.id||l.target)===id
-      );
-      if (!linkExists) links.push({ source: parentId, target: id });
-      return;
-    }
-    nodeIds.add(id);
-    const existing = nodes.find(n => n.id === id);
-    if (!existing) nodes.push({ id, label: kw, depth });
-    else existing.depth = Math.min(existing.depth, depth);
-    links.push({ source: parentId, target: id });
-    toExpand.push({ id, label: kw });
-  });
-
-  updateGraph();
-
-  // 자식은 순차적으로 지연 실행 (rate-limit 보호)
-  toExpand.forEach((child, i) => {
-    setTimeout(() => expandNode(child.label, child.id, depth + 1), i * REQUEST_DELAY);
-  });
-}
-
-// ────────────────────────────────────────
-// 검색 시작
+// 검색 시작 (BFS 전수 수집 → 일괄 렌더)
 // ────────────────────────────────────────
 async function startSearch(keyword) {
   if (!keyword || isLoading) return;
@@ -676,22 +909,35 @@ async function startSearch(keyword) {
   nodesG.selectAll('*').remove();
   infoPanelEl.classList.remove('visible');
   emptyState.classList.add('hidden');
-
-  const rootId = keyword.toLowerCase();
-  nodeIds.add(rootId);
-  nodes.push({ id: rootId, label: keyword, depth: 0, fx: width/2, fy: height/2 });
-  updateGraph();
+  document.getElementById('stats-chart').innerHTML = '';
+  document.getElementById('stats-kw-label').textContent = '';
 
   setLoading(true, `"${keyword}" 연관검색어 수집 중...`);
 
+  adjustGraphTop();
+
+  const rootId = keyword.toLowerCase();
+  nodeIds.add(rootId);
+  nodes.push({ id: rootId, label: keyword, depth: 0,
+    totalVol:0, pcVol:0, mobileVol:0, pcClicks:0, mobileClicks:0, pcCtr:0, mobileCtr:0,
+    fx: width/2, fy: height/2 });
+
   try {
-    await expandNode(keyword, rootId, 1);
+    // 1차 키워드만 먼저 가져와서 stats 패널 표시
+    const firstLevel = await fetchNaverKeywords(keyword);
+    if (firstLevel.length > 0) renderStats(keyword, firstLevel);
+
+    // 전수 BFS 수집
+    await collectAll(keyword, rootId);
   } catch(e) {
     showToast('오류가 발생했습니다. 다시 시도해주세요.');
   } finally {
     setLoading(false);
     if (nodes.length <= 1) {
       showToast('연관 검색어를 찾지 못했습니다. 다른 키워드를 시도해보세요.');
+    } else {
+      updateGraph();
+      showToast(`총 ${nodes.length}개 키워드 로드 완료`);
     }
   }
 }
@@ -709,10 +955,8 @@ document.getElementById('searchInput').addEventListener('keydown', e => {
     if (kw) startSearch(kw);
   }
 });
-window.addEventListener('resize', () => {
-  width = window.innerWidth; height = window.innerHeight;
-  simulation.force('center', d3.forceCenter(width/2, height/2)).alpha(0.1).restart();
-});
+window.addEventListener('resize', () => { adjustGraphTop(); });
+adjustGraphTop();
 svg.call(zoom.transform, d3.zoomIdentity);
 </script>
 </body>
