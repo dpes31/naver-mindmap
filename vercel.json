@@ -1,8 +1,6 @@
 {
   "functions": {
-    "api/keywords.js": {
-      "memory": 128,
-      "maxDuration": 10
-    }
+    "api/keywords.js": { "memory": 128, "maxDuration": 10 },
+    "api/trend.js":    { "memory": 128, "maxDuration": 12 }
   }
 }
