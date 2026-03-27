@@ -9,7 +9,6 @@
 </head>
 <body>
 
-<!-- ── 헤더 ── -->
 <header>
   <div class="brand">Naver <span>MindMap</span></div>
   <div class="search-wrap">
@@ -22,17 +21,28 @@
 
   <!-- ── 월간 검색량 섹션 ── -->
   <section class="stats-section">
-    <div class="section-header">
-      <span class="section-title">월간 검색량</span>
-      <span class="section-kw" id="stats-kw"></span>
+    <div class="stats-top-header">
+      <span class="stats-main-title">월간 검색량</span>
+      <span class="stats-kw-badge" id="stats-kw-badge"></span>
     </div>
     <div class="legend-row">
       <div class="legend-item"><div class="legend-dot" style="background:#1a56db"></div>PC 검색수</div>
       <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>Mobile 검색수</div>
-      <span class="section-sub">각 행에 클릭수·CTR 표시 / 검색량 많은 순 정렬</span>
+      <span class="legend-note">검색량 많은 순 정렬 · TOP 5</span>
     </div>
-    <div class="bar-chart-wrap" id="bar-chart">
-      <p style="color:#9ca3af;font-size:13px;padding:20px 0">검색어를 입력하면 연관 키워드 통계가 표시됩니다.</p>
+
+    <div class="stats-body">
+      <!-- 좌: 추이 차트 -->
+      <div class="trend-panel">
+        <div class="trend-panel-title">키워드 : <span id="trend-panel-kw"></span></div>
+        <div class="trend-panel-sub">월별 검색수 추이 (최근 1년)</div>
+        <svg id="trend-chart"></svg>
+      </div>
+
+      <!-- 우: 키워드 카드 5개 -->
+      <div class="cards-panel" id="kw-cards">
+        <p style="color:#9ca3af;font-size:13px;padding:16px 0">검색어를 입력하면 TOP 5 키워드 통계가 표시됩니다.</p>
+      </div>
     </div>
   </section>
 
@@ -40,38 +50,47 @@
   <div class="ga-section">
     <div class="ga-card" id="gender-section">
       <div class="ga-title">성별 검색 비율</div>
-      <div class="ga-placeholder">네이버 DataLab API 연동 시 표시<br><span style="font-size:11px;margin-top:4px;display:block">별도 API 신청 필요</span></div>
+      <div class="ga-placeholder">검색어를 입력하면 표시됩니다</div>
     </div>
     <div class="ga-card" id="age-section">
       <div class="ga-title">연령별 검색 비율</div>
-      <div class="ga-placeholder">네이버 DataLab API 연동 시 표시<br><span style="font-size:11px;margin-top:4px;display:block">별도 API 신청 필요</span></div>
+      <div class="ga-placeholder">DataLab 연령별 API 추가 연동 예정</div>
     </div>
   </div>
 
-  <!-- ── 마인드맵 섹션 ── -->
-  <section class="mindmap-section">
-    <div class="mindmap-header">
-      <span class="mindmap-title">연관 키워드 마인드맵</span>
-      <div class="mm-legend" id="mm-legend">
-        <div class="mm-legend-item"><div class="mm-dot" style="background:#1a56db"></div>검색어</div>
-        <div class="mm-legend-item"><div class="mm-dot" style="background:#22c55e"></div>1차 연관</div>
-        <div class="mm-legend-item"><div class="mm-dot" style="background:#f59e0b"></div>2차 연관</div>
-        <div class="mm-legend-item"><div class="mm-dot" style="background:#8b5cf6"></div>3차 연관</div>
+  <!-- ── 마인드맵 섹션 (좌우 여백 = 스크롤 영역) ── -->
+  <section class="mindmap-outer">
+    <div class="mindmap-margin">
+      <span class="margin-label">scroll</span>
+    </div>
+
+    <div class="mindmap-content">
+      <div class="mindmap-header">
+        <span class="mindmap-title">연관 키워드 마인드맵</span>
+        <div class="mm-legend" id="mm-legend">
+          <div class="mm-legend-item"><div class="mm-dot" style="background:#1a56db"></div>검색어</div>
+          <div class="mm-legend-item"><div class="mm-dot" style="background:#22c55e"></div>1차 연관</div>
+          <div class="mm-legend-item"><div class="mm-dot" style="background:#f59e0b"></div>2차 연관</div>
+          <div class="mm-legend-item"><div class="mm-dot" style="background:#8b5cf6"></div>3차 연관</div>
+        </div>
+      </div>
+
+      <svg id="graph"></svg>
+
+      <div id="empty-state">
+        <div class="empty-icon">🔍</div>
+        <div class="empty-title">키워드를 검색하세요</div>
+        <div class="empty-sub">네이버 연관 검색어를 마인드맵으로 시각화합니다</div>
       </div>
     </div>
 
-    <svg id="graph"></svg>
-
-    <div id="empty-state">
-      <div class="empty-icon">🔍</div>
-      <div class="empty-title">키워드를 검색하세요</div>
-      <div class="empty-sub">네이버 연관 검색어를 마인드맵으로 시각화합니다</div>
+    <div class="mindmap-margin">
+      <span class="margin-label">scroll</span>
     </div>
   </section>
 
 </main>
 
-<!-- ── 공통 UI ── -->
 <div id="loading">
   <div class="spinner"></div>
   <p id="loading-text">연관 검색어 수집 중...</p>
