@@ -27,10 +27,12 @@ module.exports = async (req, res) => {
   if (!cid || !csec)
     return res.status(500).json({ error: 'NAVER_DATALAB_CLIENT_ID / NAVER_DATALAB_CLIENT_SECRET 환경변수 미설정' });
 
-  const endD   = new Date();
+  const now    = new Date();
+  const endD   = new Date(now.getFullYear(), now.getMonth(), 0); // last day of prev month
   const startD = new Date(endD);
-  startD.setMonth(startD.getMonth() - 12);
+  startD.setMonth(startD.getMonth() - 11);
   startD.setDate(1);
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   const fmt = d => d.toISOString().slice(0, 10);
   const base = {
     startDate: fmt(startD),
@@ -70,7 +72,7 @@ module.exports = async (req, res) => {
       period: pt.period.slice(0, 7),
       pc: +(pt.ratio.toFixed(2)),
       mo: +((moData[i]?.ratio ?? 0).toFixed(2)),
-    }));
+    })).filter(d => d.period < currentMonth);
 
     // 성별 (최근 3개월 평균)
     const avg3 = arr => {
