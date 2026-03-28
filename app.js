@@ -333,14 +333,16 @@ function renderGenderAge(data) {
 }
 
 // ── 노드 반경 (검색량 비례 — 같은 depth 내 log 스케일) ────
+// base: 역할별 기본 크기 / range: ±range 범위로 검색량 비례 변화
 function nodeRadius(d) {
-  const base  = d.depth===0?46:d.isHub?28:d.depth===1?13:d.depth===2?17:10;
-  const range = d.depth===0?0:d.isHub?9:d.depth===1?4:d.depth===2?7:4;
+  const base  = d.depth===0?50:d.isHub?32:d.depth===1?16:d.depth===2?20:12;
+  const range = d.depth===0?0:d.isHub?14:d.depth===1?6:d.depth===2?9:5;
   if (!d.totalVol || range===0 || !nodes.length) return base;
   const peers = nodes.filter(n => d.isHub ? n.isHub : (n.depth===d.depth && !n.isHub));
   const maxVol = Math.max(...peers.map(n=>n.totalVol), 1);
   const scale  = Math.log1p(d.totalVol) / Math.log1p(maxVol); // 0~1
-  return Math.round(base + (scale - 0.5) * range * 2);
+  // 검색량 0인 노드는 최소 크기, 최대 검색량은 base+range
+  return Math.round((base - range) + scale * range * 2);
 }
 
 function linkWidth(d) {
@@ -419,6 +421,11 @@ glow.append('feGaussianBlur').attr('stdDeviation','5').attr('result','coloredBlu
 const fm=glow.append('feMerge');
 fm.append('feMergeNode').attr('in','coloredBlur');
 fm.append('feMergeNode').attr('in','SourceGraphic');
+
+// 버블 헤일로용 소프트 블러 필터 (feGaussianBlur, 넓게 퍼지는 glow)
+const softBlur=defs.append('filter').attr('id','soft-blur')
+  .attr('x','-120%').attr('y','-120%').attr('width','340%').attr('height','340%');
+softBlur.append('feGaussianBlur').attr('stdDeviation','14');
 
 function lighten(hex,a) {
   const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
@@ -569,34 +576,26 @@ function updateGraph() {
       .on('end',(e,d)=>{if(!e.active)simulation.alphaTarget(0);d.fx=null;d.fy=null;}))
     .on('mouseenter',onHover).on('mouseleave',onLeave).on('click',onClick);
 
-  // 외부 소프트 글로우 (그림자 느낌)
+  // 버블 헤일로 — 블러 처리된 넓은 glow (첨부1 버블차트 스타일)
   enter.append('circle').attr('class','node-glow')
-    .attr('r',d=>nodeRadius(d)+(d.depth===0?18:d.isHub?12:7))
-    .attr('fill',d=>nodeGlowColor(d))
-    .attr('fill-opacity',d=>d.depth===0?0.18:d.isHub?0.14:0.07)
+    .attr('r',d=>nodeRadius(d)*(d.depth===0?2.0:d.isHub?1.9:1.7))
+    .attr('fill',d=>nodeFillColor(d))
+    .attr('fill-opacity',d=>d.depth===0?0.32:d.isHub?0.26:d.depth===1?0.20:d.depth===2?0.18:0.14)
+    .attr('filter','url(#soft-blur)')
     .attr('stroke','none');
 
-  // 메인 원 — 플랫 solid fill, 두꺼운 화이트 링 테두리
+  // 메인 원 — flat solid fill, 테두리 없음 (버블 스타일)
   enter.append('circle').attr('class','node-circle')
     .attr('r',d=>nodeRadius(d))
     .attr('fill',d=>nodeFillColor(d))
-    .attr('fill-opacity',d=>d.depth===3?0.75:d.depth===1&&!d.isHub?0.85:0.93)
-    .attr('stroke','rgba(255,255,255,0.85)')
-    .attr('stroke-width',d=>d.depth===0?4:d.isHub?3.5:d.depth===1?2.5:d.depth===2?2:1.5);
+    .attr('fill-opacity',d=>d.depth===3?0.82:d.depth===1&&!d.isHub?0.90:0.96)
+    .attr('stroke','none');
 
-  // 글래스 하이라이트 (상단 흰색 반달 — 글래스모피즘 광택)
-  enter.append('ellipse').attr('class','node-shine')
-    .attr('rx',d=>nodeRadius(d)*0.55)
-    .attr('ry',d=>nodeRadius(d)*0.28)
-    .attr('cx',0).attr('cy',d=>-nodeRadius(d)*0.38)
-    .attr('fill','rgba(255,255,255,0.35)')
-    .attr('pointer-events','none');
-
-  // 텍스트
+  // 텍스트 — 클린 볼드, 테두리 없음
   enter.each(function(d) {
     const r=nodeRadius(d);
-    const fs=d.depth===0?13:d.isHub?11:d.depth===1?9:d.depth===2?9:8;
-    const maxW=r*1.8;
+    const fs=d.depth===0?14:d.isHub?12:d.depth===1?10:d.depth===2?9:8;
+    const maxW=r*1.85;
     const cpl=Math.max(2,Math.floor(maxW/(fs*0.62)));
     const chars=[...d.label];
     const lines=[];
@@ -604,13 +603,12 @@ function updateGraph() {
     const lh=fs+2;
     const startY=-(lines.length-1)*lh/2;
     const fillCol=nodeTextColor(d);
-    const strokeCol=d.depth===0||d.isHub?'rgba(0,0,0,0.25)':'rgba(255,255,255,0.90)';
     const txt=d3.select(this).append('text').attr('class','node-label')
       .attr('text-anchor','middle').attr('fill',fillCol)
-      .attr('stroke',strokeCol).attr('stroke-width',d.depth===0||d.isHub?0:2.5)
-      .attr('paint-order','stroke')
-      .attr('font-size',`${fs}px`).attr('font-weight',d.depth===0||d.isHub?'700':'600')
+      .attr('stroke','none')
+      .attr('font-size',`${fs}px`).attr('font-weight','700')
       .attr('font-family','-apple-system,BlinkMacSystemFont,system-ui,sans-serif')
+      .attr('letter-spacing','-0.02em')
       .attr('pointer-events','none');
     lines.forEach((l,i)=>{
       txt.append('tspan').attr('x',0).attr('dy',i===0?startY:lh).text(l);
@@ -686,7 +684,7 @@ function onHover(e,d) {
 function onLeave(e,d) {
   const r=nodeRadius(d);
   d3.select(this).select('.node-circle').attr('filter',null).transition().duration(150).attr('r',r);
-  const glowOp=d.depth===0?0.18:d.isHub?0.14:0.07;
+  const glowOp=d.depth===0?0.32:d.isHub?0.26:d.depth===1?0.20:d.depth===2?0.18:0.14;
   d3.select(this).select('.node-glow').transition().duration(150).attr('fill-opacity',glowOp);
   tooltipEl.classList.remove('visible');
 }
