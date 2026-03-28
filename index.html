@@ -9,15 +9,30 @@
 </head>
 <body>
 
-<header>
+<!-- ── 히어로 랜딩 (초기 화면) ── -->
+<section id="hero-section">
+  <div class="hero-inner">
+    <div class="hero-brand">Naver <span>MindMap</span></div>
+    <h1 class="hero-title">Keyword Mindmap</h1>
+    <p class="hero-sub">네이버 연관 검색어를 마인드맵으로 시각화합니다</p>
+    <div class="hero-search-box">
+      <input type="text" id="searchInput" placeholder="검색어를 입력하세요" autocomplete="off">
+      <button id="searchBtn">검색</button>
+    </div>
+  </div>
+</section>
+
+<!-- ── 결과 화면 헤더 (검색 후 표시) ── -->
+<header id="site-header" class="hidden">
   <div class="brand">Naver <span>MindMap</span></div>
-  <div class="search-wrap">
-    <input type="text" id="searchInput" placeholder="검색어를 입력하세요 (예: 에이스침대)" autocomplete="off">
-    <button id="searchBtn">검색</button>
+  <div class="header-search-wrap">
+    <input type="text" id="headerInput" placeholder="다른 검색어 입력..." autocomplete="off">
+    <button id="headerBtn">검색</button>
   </div>
 </header>
 
-<main>
+<!-- ── 결과 섹션 (검색 후 표시) ── -->
+<main id="results-wrap" class="hidden">
 <div class="page-wrap">
 
   <!-- ── 월간 검색량 + 연관 키워드 ── -->
@@ -46,9 +61,7 @@
         <div class="panel-sub-row">
           <span class="panel-sub-note" style="margin-left:auto">검색량 많은 순 정렬 · TOP 5</span>
         </div>
-        <div class="cards-panel" id="kw-cards">
-          <p style="color:#9ca3af;font-size:13px;padding:16px 0">검색어를 입력하면 TOP 5 키워드 통계가 표시됩니다.</p>
-        </div>
+        <div class="cards-panel" id="kw-cards"></div>
       </div>
 
     </div>
@@ -84,7 +97,7 @@
       </div>
       <div class="mindmap-content">
         <svg id="graph"></svg>
-        <div id="empty-state">
+        <div id="empty-state" class="hidden">
           <div class="empty-icon">🔍</div>
           <div class="empty-title">키워드를 검색하세요</div>
           <div class="empty-sub">네이버 연관 검색어를 마인드맵으로 시각화합니다</div>
@@ -95,6 +108,7 @@
     <div class="mindmap-margin"></div>
   </section>
 
+  <div class="bottom-spacer"></div>
 </main>
 
 <div id="loading">
