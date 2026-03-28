@@ -419,11 +419,11 @@ function makeGradient(id, color, opacity=1) {
 }
 // 루트 노드 그라디언트
 makeGradient('grad-root', ROOT_COLOR, 1);
-// TOP5 허브 각 고유색 그라디언트
-HUB_COLORS.forEach((c,i) => makeGradient(`grad-hub-${i}`, c, 1));
-// 기타 1차 (슬레이트)
+// 카테고리별 halo 색상 그라디언트 (legacy - 사용 안 하지만 안전하게 유지)
+CLUSTER_COLORS.forEach((c,i) => makeGradient(`grad-hub-${i}`, c, 1));
+// 기타 1차
 makeGradient('grad-nonhub', NON_HUB_COLOR, 0.88);
-// 3차 연관 (연한 회색)
+// 3차 연관
 makeGradient('grad-d3', D3_COLOR, 0.80);
 // 레거시 (링크등 일부 호환)
 DEPTH_COLORS.forEach((c,i)=>makeGradient(`grad-${i}`,c,DEPTH_OPACITY[i]));
@@ -775,7 +775,7 @@ async function collectAll(rootKeyword, rootId, prefetchedRoot) {
   currentClusters = addedHubs.map((item,i)=>({
     id:`hub-${i}`, hubIdx:i,
     label:item.keyword||'',
-    color:HUB_COLORS[i%HUB_COLORS.length],
+    color:CLUSTER_COLORS[i%CLUSTER_COLORS.length],
     items:[item],
   }));
   prog(20,`TOP${addedHubs.length} 허브 선정 완료`);
