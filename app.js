@@ -159,8 +159,11 @@ function renderStats(keyword, items) {
 // ── DataLab 상대지수 → 절대값 변환 ──────────────────
 function scaleTrend(trend, pcAbs, moAbs) {
   if (!trend?.length) return trend;
-  const avg3 = (arr,k) => { const s=arr.slice(-3); return s.reduce((a,d)=>a+d[k],0)/(s.length||1); };
-  const pcRef = avg3(trend,'pc')||1, moRef = avg3(trend,'mo')||1;
+  // 최신 데이터포인트를 기준점으로 사용
+  // (avg3 방식은 최신 월 수치가 Search Ads API 값과 불일치하는 문제 발생)
+  // 기준: 마지막 DataLab 상대지수 → Search Ads API 절대값으로 1:1 anchoring
+  const last = trend[trend.length - 1];
+  const pcRef = last?.pc || 1, moRef = last?.mo || 1;
   return trend.map(d=>({
     period:d.period,
     pc: pcAbs>0 ? Math.round(d.pc/pcRef*pcAbs) : Math.round(d.pc),
@@ -601,7 +604,8 @@ function updateGraph() {
     const lines=[];
     for(let i=0;i<chars.length;i+=cpl) lines.push(chars.slice(i,i+cpl).join(''));
     const lh=fs+2;
-    const startY=-(lines.length-1)*lh/2;
+    // cap-height 보정: SVG baseline은 시각적 중심보다 아래 → +fs*0.35 로 위로 이동
+    const startY=-(lines.length-1)*lh/2 + fs*0.35;
     const fillCol=nodeTextColor(d);
     const txt=d3.select(this).append('text').attr('class','node-label')
       .attr('text-anchor','middle').attr('fill',fillCol)
