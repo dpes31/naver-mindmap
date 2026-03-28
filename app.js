@@ -1,18 +1,21 @@
 // ── 설정 ──────────────────────────────────────────
 const ROOT_COLOR     = '#1e3a5f';   // 검색어 노드 (딥 네이비)
-const HUB_COLORS     = ['#3b82f6','#ef4444','#10b981','#f59e0b','#8b5cf6']; // TOP5 허브 고유색
-const NON_HUB_COLOR  = '#94a3b8';   // 기타 1차 연관 (슬레이트)
-const D3_COLOR       = '#c8d6e5';   // 3차 연관 (연한 회색-블루)
-const CLUSTER_COLORS = HUB_COLORS;  // 호환성
+// 카테고리 halo 배경 색 (5개 영역 구분용)
+const CLUSTER_COLORS = ['#3b82f6','#ef4444','#10b981','#f59e0b','#8b5cf6'];
+// 노드 fill 색 (역할별)
+const HUB_COLOR      = '#ef4444';   // TOP5 허브 1차 (빨강)
+const NON_HUB_COLOR  = '#bbf7d0';   // 기타 1차 (연한 초록)
+const D2_COLOR       = '#fbbf24';   // 2차 연관 (노란색/앰버)
+const D3_COLOR       = '#94a3b8';   // 3차 연관 (회색)
 
 // 레전드용
-const DEPTH_COLORS   = [ROOT_COLOR, HUB_COLORS[0], NON_HUB_COLOR, D3_COLOR];
-const DEPTH_OPACITY  = [1, 1, 0.85, 0.75];
+const DEPTH_COLORS   = [ROOT_COLOR, HUB_COLOR, D2_COLOR, D3_COLOR];
+const DEPTH_OPACITY  = [1, 1, 1, 1];
 
-const MAX_HUB        = 5;   // TOP5 허브 노드
-const MAX_D1         = 9;   // 허브 제외 기타 1차 (총 depth-1=14)
-const MAX_D2_PER     = 5;   // 허브당 depth-2 수 (5×5=25)
-const MAX_D3_PER     = 2;   // 허브당 depth-3 수 (5×1×2=10) → 총 50
+const MAX_HUB        = 5;
+const MAX_D1         = 9;
+const MAX_D2_PER     = 5;
+const MAX_D3_PER     = 2;
 const MAX_LINKS_SHOW = 60;
 const MAX_DEPTH      = 3;
 let currentClusters  = [];
@@ -353,13 +356,14 @@ function hexToRgba(hex, a) {
   const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
   return `rgba(${r},${g},${b},${a})`;
 }
-// 링크 색: 허브 색 계열 기반
+// 링크 색: 노드 역할 기반
 function linkColor(d) {
   const t=nodes.find(n=>n.id===(d.target?.id||d.target));
-  if (!t) return 'rgba(148,163,184,0.18)';
-  if (t.depth===3) return 'rgba(200,214,229,0.25)';
-  if (t.depth===1 && !t.isHub) return 'rgba(148,163,184,0.22)';
-  if (t.hubIdx!=null) return hexToRgba(HUB_COLORS[t.hubIdx], 0.38);
+  if (!t) return 'rgba(148,163,184,0.20)';
+  if (t.isHub)     return hexToRgba(HUB_COLOR, 0.40);
+  if (t.depth===1) return 'rgba(134,239,172,0.35)';
+  if (t.depth===2) return hexToRgba(D2_COLOR, 0.35);
+  if (t.depth===3) return hexToRgba(D3_COLOR, 0.28);
   return 'rgba(148,163,184,0.20)';
 }
 
@@ -457,26 +461,21 @@ let nodes=[],links=[];
 const nodeIds=new Set();
 let isLoading=false;
 
-// ── 노드 fill / glow 색상 ────────────────────────────────
-function nodeFill(d) {
-  if (d.depth===0) return 'url(#grad-root)';
-  if (d.isHub)     return `url(#grad-hub-${d.hubIdx})`;
-  if (d.depth===1) return 'url(#grad-nonhub)';
-  if (d.depth===3) return 'url(#grad-d3)';
-  if (d.depth===2 && d.hubIdx!=null) return `url(#grad-hub-${d.hubIdx})`;
-  return 'url(#grad-nonhub)';
-}
-function nodeGlowColor(d) {
+// ── 노드 색상 (역할별 플랫 — 글래스모피즘) ─────────────────
+function nodeFillColor(d) {
   if (d.depth===0) return ROOT_COLOR;
-  if (d.isHub || (d.depth===2 && d.hubIdx!=null)) return HUB_COLORS[d.hubIdx]||NON_HUB_COLOR;
+  if (d.isHub)     return HUB_COLOR;
+  if (d.depth===1) return NON_HUB_COLOR;
+  if (d.depth===2) return D2_COLOR;
   if (d.depth===3) return D3_COLOR;
   return NON_HUB_COLOR;
 }
+function nodeGlowColor(d) { return nodeFillColor(d); }
 function nodeTextColor(d) {
-  // 어두운 배경 → 흰 텍스트, 밝은 배경 → 어두운 텍스트
   if (d.depth===0 || d.isHub) return '#ffffff';
-  if (d.depth===3) return '#64748b';
-  return '#111827';
+  if (d.depth===1) return '#166534';  // 연한 초록 위 → 진한 초록 텍스트
+  if (d.depth===2) return '#78350f';  // 노란색 위 → 진한 갈색 텍스트
+  return '#475569';                   // 3차 회색
 }
 
 // ── 그래프 렌더 ───────────────────────────────────────
@@ -558,20 +557,28 @@ function updateGraph() {
       .on('end',(e,d)=>{if(!e.active)simulation.alphaTarget(0);d.fx=null;d.fy=null;}))
     .on('mouseenter',onHover).on('mouseleave',onLeave).on('click',onClick);
 
-  // 글로우 링
+  // 외부 소프트 글로우 (그림자 느낌)
   enter.append('circle').attr('class','node-glow')
-    .attr('r',d=>nodeRadius(d)+(d.depth===0?14:d.isHub?10:6))
+    .attr('r',d=>nodeRadius(d)+(d.depth===0?18:d.isHub?12:7))
     .attr('fill',d=>nodeGlowColor(d))
-    .attr('fill-opacity',d=>d.depth===0?0.15:d.isHub?0.12:0.06)
+    .attr('fill-opacity',d=>d.depth===0?0.18:d.isHub?0.14:0.07)
     .attr('stroke','none');
 
-  // 메인 원
+  // 메인 원 — 플랫 solid fill, 글래스 테두리
   enter.append('circle').attr('class','node-circle')
     .attr('r',d=>nodeRadius(d))
-    .attr('fill',d=>nodeFill(d))
-    .attr('stroke',d=>d.depth===0||d.isHub?'rgba(255,255,255,0.80)':'rgba(255,255,255,0.55)')
-    .attr('stroke-width',d=>d.depth===0?3:d.isHub?2:1.2)
-    .attr('opacity',d=>d.depth===3?0.85:1);
+    .attr('fill',d=>nodeFillColor(d))
+    .attr('fill-opacity',d=>d.depth===3?0.72:d.depth===1&&!d.isHub?0.80:0.92)
+    .attr('stroke','rgba(255,255,255,0.70)')
+    .attr('stroke-width',d=>d.depth===0?2.5:d.isHub?2:1.2);
+
+  // 글래스 하이라이트 (상단 흰색 반달 — 글래스모피즘 광택)
+  enter.append('ellipse').attr('class','node-shine')
+    .attr('rx',d=>nodeRadius(d)*0.55)
+    .attr('ry',d=>nodeRadius(d)*0.28)
+    .attr('cx',0).attr('cy',d=>-nodeRadius(d)*0.38)
+    .attr('fill','rgba(255,255,255,0.35)')
+    .attr('pointer-events','none');
 
   // 텍스트
   enter.each(function(d) {
@@ -630,42 +637,25 @@ function updateGraph() {
   });
 }
 
-// ── 허브 헐(halo) 렌더 ────────────────────────────────────
+// ── 허브 헐(halo) 렌더 — 라벨 제거, 선 강조 ─────────────────
 function renderHalos() {
   halosG.selectAll('.ch').data(currentClusters,d=>d.id).join(
     enter=>enter.append('g').attr('class','ch').call(g=>{
       g.append('path').attr('class','ch-fill');
-      g.append('rect').attr('class','ch-label-bg').attr('rx',6).attr('ry',6);
-      g.append('text').attr('class','ch-label-txt')
-        .attr('text-anchor','middle').attr('font-size',11).attr('font-weight',700)
-        .attr('fill','#fff').attr('pointer-events','none').attr('dy','0.35em');
     })
   ).each(function(cluster){
     const hi=cluster.hubIdx;
-    // 해당 허브 + 그 자식 노드들만 포함 (비허브 depth-1 제외)
     const cNodes=nodes.filter(n=>
       (n.isHub && n.hubIdx===hi) || (n.hubIdx===hi && n.depth>=2)
     ).filter(n=>n.x!=null&&!isNaN(n.x));
     if(cNodes.length<2) return;
     const pts=cNodes.map(n=>[n.x,n.y]);
-    const pad=26;
+    const pad=28;
     d3.select(this).select('.ch-fill')
       .attr('d',hullPath(pts,pad))
-      .attr('fill',cluster.color).attr('fill-opacity',0.08)
-      .attr('stroke',cluster.color).attr('stroke-width',1.8)
-      .attr('stroke-opacity',0.35);
-    // 레이블: hull 상단, 허브 키워드명 표시
-    const cx=d3.mean(pts,p=>p[0]);
-    const minY=d3.min(pts,p=>p[1])-pad+8;
-    const label=cluster.label||'';
-    const tw=label.length*7.5+18;
-    d3.select(this).select('.ch-label-bg')
-      .attr('x',cx-tw/2).attr('y',minY-11)
-      .attr('width',tw).attr('height',20)
-      .attr('fill',cluster.color).attr('fill-opacity',0.85);
-    d3.select(this).select('.ch-label-txt')
-      .attr('x',cx).attr('y',minY)
-      .text(label);
+      .attr('fill',cluster.color).attr('fill-opacity',0.10)
+      .attr('stroke',cluster.color).attr('stroke-width',2.2)
+      .attr('stroke-opacity',0.55);
   });
 }
 
@@ -905,20 +895,15 @@ function setLoading(active,text='연관 검색어 수집 중...') {
 function updateLegend(keyword) {
   const items=[
     {label:keyword||'검색어', color:ROOT_COLOR},
-    {label:'TOP5 핵심 키워드', color:HUB_COLORS[0], multi:true},
-    {label:'기타 1차 연관', color:NON_HUB_COLOR},
-    {label:'2차 연관', color:'#94a3b8', note:'허브 색 계열'},
+    {label:'1차 핵심 연관', color:HUB_COLOR},
+    {label:'1차 기타 연관', color:NON_HUB_COLOR},
+    {label:'2차 연관', color:D2_COLOR},
     {label:'3차 연관', color:D3_COLOR},
   ];
   const wrap=document.getElementById('mm-legend');
-  wrap.innerHTML=items.map(item=>{
-    if(item.multi){
-      // 5개 허브 색을 작게 표시
-      const dots=HUB_COLORS.map(c=>`<div class="mm-dot" style="background:${c};width:8px;height:8px"></div>`).join('');
-      return `<div class="mm-legend-item">${dots}<span style="margin-left:4px">${item.label}</span></div>`;
-    }
-    return `<div class="mm-legend-item"><div class="mm-dot" style="background:${item.color}"></div>${item.label}</div>`;
-  }).join('');
+  wrap.innerHTML=items.map(item=>
+    `<div class="mm-legend-item"><div class="mm-dot" style="background:${item.color};opacity:0.9"></div>${item.label}</div>`
+  ).join('');
 }
 
 // ── 히어로 → 결과 전환 ────────────────────────────────
