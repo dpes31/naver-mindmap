@@ -157,12 +157,19 @@ function renderStats(keyword, items) {
 }
 
 // ── DataLab 상대지수 → 절대값 변환 ──────────────────
-// DataLab 상대 지수(0~100)를 그대로 반환 — 절대값 변환하지 않음
-// 이유: Search Ads API는 현재 월 1개 값만 제공, 과거 월 역산 시 계절성 키워드에서 최대 5배 왜곡 발생
-// 절대 검색량은 Search Ads API 값을 직접 표시하는 키워드 카드에서 확인
-function scaleTrend(trend) {
+// DataLab 상대 지수를 Search Ads API 절대값으로 변환
+// 기준: 마지막 DataLab 데이터포인트 = Search Ads API 현재 월 절대값 (1:1 anchoring)
+// 나머지 월 = DataLab 상대 비율로 비례 계산
+// ※ Search Ads API는 현재 월 1개 값만 제공 → 과거 월은 DataLab 비율로 역산한 추정치
+function scaleTrend(trend, pcAbs, moAbs) {
   if (!trend?.length) return trend;
-  return trend.map(d=>({ period:d.period, pc:d.pc, mo:d.mo }));
+  const last = trend[trend.length - 1];
+  const pcRef = last?.pc || 1, moRef = last?.mo || 1;
+  return trend.map(d=>({
+    period: d.period,
+    pc: pcAbs > 0 ? Math.round(d.pc / pcRef * pcAbs) : Math.round(d.pc),
+    mo: moAbs > 0 ? Math.round(d.mo / moRef * moAbs) : Math.round(d.mo),
+  }));
 }
 let currentTrendData=null;
 function copyTrendData() {
@@ -187,16 +194,15 @@ function renderTrendChart(trendData, pcAbsNow, moAbsNow) {
     return;
   }
 
-  // 상대 지수 그대로 사용 (절대값 변환 없음)
-  const data = scaleTrend(trendData);
+  // Search Ads API 절대값 기준으로 스케일링 (마지막 월 = Search Ads API 정확값)
+  const data = scaleTrend(trendData, pcAbsNow||0, moAbsNow||0);
   currentTrendData = data;
 
   if (legendEl) legendEl.innerHTML =
-    `<div class="tl-item"><div class="tl-dot" style="background:#1a56db"></div>PC Desktop</div>
-     <div class="tl-item"><div class="tl-dot" style="background:#16a34a"></div>Mobile</div>
-     <div class="tl-note">※ 상대 지수 (0~100) — 절대 검색량은 상단 키워드 카드 참조</div>`;
+    `<div class="tl-item"><div class="tl-dot" style="background:#1a56db"></div>PC 검색수</div>
+     <div class="tl-item"><div class="tl-dot" style="background:#16a34a"></div>Mobile 검색수</div>`;
 
-  const margin={top:16,right:16,bottom:36,left:46};
+  const margin={top:12,right:16,bottom:36,left:60};
   const W=container.clientWidth||420, H=Math.max(200, container.clientHeight||230);
   const w=W-margin.left-margin.right, h=H-margin.top-margin.bottom;
 
@@ -205,8 +211,7 @@ function renderTrendChart(trendData, pcAbsNow, moAbsNow) {
     .append('g').attr('transform',`translate(${margin.left},${margin.top})`);
 
   const x=d3.scaleBand().domain(data.map(d=>d.period)).range([0,w]).padding(0.1);
-  // Y축: 상대 지수 0~100 고정 스케일
-  const yMax=Math.min(100, d3.max(data,d=>Math.max(d.pc,d.mo))*1.12||100);
+  const yMax=d3.max(data,d=>Math.max(d.pc,d.mo))*1.18||100;
   const y=d3.scaleLinear().domain([0,yMax]).range([h,0]).nice();
   const xPos=d=>x(d.period)+x.bandwidth()/2;
 
@@ -219,14 +224,11 @@ function renderTrendChart(trendData, pcAbsNow, moAbsNow) {
   xAx.selectAll('text').attr('font-size',10).attr('fill','#6b7280');
   xAx.select('.domain').attr('stroke','#e5e7eb');
 
-  // Y축: 0~100 상대 지수 (소수점 없이 정수 표시)
-  const yAx=svg.append('g').call(d3.axisLeft(y).ticks(5).tickFormat(v=>Math.round(v)));
+  // Y축: 실제 검색량 숫자 (만/천 단위 포맷)
+  const yFmt=v=>v>=10000?(v/10000).toFixed(1)+'만':v>=1000?(v/1000).toFixed(0)+'천':v;
+  const yAx=svg.append('g').call(d3.axisLeft(y).ticks(5).tickFormat(yFmt));
   yAx.selectAll('text').attr('font-size',10).attr('fill','#6b7280');
   yAx.select('.domain').attr('stroke','#e5e7eb');
-
-  // Y축 타이틀
-  svg.append('text').attr('transform','rotate(-90)').attr('x',-h/2).attr('y',-38)
-    .attr('text-anchor','middle').attr('font-size',9).attr('fill','#9ca3af').text('검색 지수');
 
   [['mo','#16a34a'],['pc','#1a56db']].forEach(([k,c])=>{
     svg.append('path').datum(data)
@@ -262,9 +264,8 @@ function renderTrendChart(trendData, pcAbsNow, moAbsNow) {
       const ttx=rect.left+margin.left+cx+16;
       const tty=rect.top+margin.top+Math.min(y(d.pc),y(d.mo))-12;
       chartTip.innerHTML=`<div class="ct-date">${d.period}</div>
-        <div class="ct-row"><span class="ct-dot" style="background:#1a56db"></span>PC<b>${d.pc.toFixed(1)}</b></div>
-        <div class="ct-row"><span class="ct-dot" style="background:#16a34a"></span>Mobile<b>${d.mo.toFixed(1)}</b></div>
-        <div style="font-size:10px;color:#9ca3af;margin-top:4px">DataLab 상대 지수 (0~100)</div>`;
+        <div class="ct-row"><span class="ct-dot" style="background:#1a56db"></span>PC<b>${d.pc.toLocaleString()}건</b></div>
+        <div class="ct-row"><span class="ct-dot" style="background:#16a34a"></span>Mobile<b>${d.mo.toLocaleString()}건</b></div>`;
       chartTip.style.left=Math.min(ttx,window.innerWidth-180)+'px';
       chartTip.style.top=Math.max(tty,60)+'px';
       chartTip.classList.add('visible');
