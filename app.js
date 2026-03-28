@@ -330,8 +330,15 @@ function nodeRadius(d) {
 
 function linkWidth(d) {
   const t=nodes.find(n=>n.id===(d.target?.id||d.target));
-  // 선 두께 균일 (depth별 미세 차이만)
-  return t?.depth===1 ? 2 : t?.depth===2 ? 1.5 : 1.2;
+  const base = t?.depth===1 ? 2 : t?.depth===2 ? 1.5 : 1.2;
+  // 검색량 있으면 두께도 비례 보정 (+0 ~ +0.8)
+  if (t?.totalVol > 0) {
+    const same = nodes.filter(n=>n.depth===t.depth&&n.totalVol>0);
+    const maxV = Math.max(...same.map(n=>n.totalVol), 1);
+    const ratio = Math.log1p(t.totalVol) / Math.log1p(maxV);
+    return +(base + ratio * 0.8).toFixed(2);
+  }
+  return base;
 }
 
 function hexToRgba(hex, a) {
@@ -341,7 +348,15 @@ function hexToRgba(hex, a) {
 function linkColor(d) {
   const t=nodes.find(n=>n.id===(d.target?.id||d.target));
   if (!t) return 'rgba(160,174,192,0.25)';
-  return hexToRgba(DEPTH_COLORS[Math.min(t.depth,3)], 0.45);
+  // 연결 강도: 타깃 노드의 검색량에 비례해 opacity 변화 (0.25 ~ 0.70)
+  let alpha = 0.45;
+  if (t.totalVol > 0) {
+    const same = nodes.filter(n=>n.depth===t.depth&&n.totalVol>0);
+    const maxV = Math.max(...same.map(n=>n.totalVol), 1);
+    const ratio = Math.log1p(t.totalVol) / Math.log1p(maxV);
+    alpha = 0.22 + ratio * 0.48; // 0.22 ~ 0.70
+  }
+  return hexToRgba(DEPTH_COLORS[Math.min(t.depth,3)], alpha);
 }
 
 // ── D3 초기화 ─────────────────────────────────────────
@@ -592,6 +607,8 @@ function setLoading(active,text='연관 검색어 수집 중...') {
   loadingText.textContent=text;
   loadingEl.classList.toggle('active',active);
   document.getElementById('searchBtn').disabled=active;
+  const hb=document.getElementById('headerBtn');
+  if(hb) hb.disabled=active;
   if(!active) {
     document.getElementById('loading-progress').textContent='';
     const b=document.getElementById('progress-bar');
@@ -607,6 +624,16 @@ function updateLegend(keyword) {
   ).join('');
 }
 
+// ── 히어로 → 결과 전환 ────────────────────────────────
+function showResults() {
+  const hero=document.getElementById('hero-section');
+  const header=document.getElementById('site-header');
+  const results=document.getElementById('results-wrap');
+  if(hero) hero.classList.add('hidden');
+  if(header) header.classList.remove('hidden');
+  if(results) results.classList.remove('hidden');
+}
+
 // ── 검색 시작 ─────────────────────────────────────────
 async function startSearch(keyword) {
   if(!keyword||isLoading) return;
@@ -619,6 +646,10 @@ async function startSearch(keyword) {
   document.getElementById('kw-cards').innerHTML='';
   document.getElementById('trend-chart').innerHTML='';
 
+  showResults();
+  // 헤더 인풋 동기화
+  const hdrIn=document.getElementById('headerInput');
+  if(hdrIn) hdrIn.value=keyword;
   setLoading(true,`"${keyword}" 수집 중...`);
   updateLegend(keyword);
 
@@ -667,12 +698,21 @@ async function startSearch(keyword) {
 }
 
 // ── 이벤트 ────────────────────────────────────────────
+// 히어로 검색
 document.getElementById('searchBtn').addEventListener('click',()=>{
   const kw=document.getElementById('searchInput').value.trim();
   if(kw) startSearch(kw);
 });
 document.getElementById('searchInput').addEventListener('keydown',e=>{
   if(e.key==='Enter'){const kw=e.target.value.trim();if(kw)startSearch(kw);}
+});
+// 헤더 검색
+document.getElementById('headerBtn').addEventListener('click',()=>{
+  const kw=document.getElementById('headerInput').value.trim();
+  if(kw){document.getElementById('searchInput').value=kw;startSearch(kw);}
+});
+document.getElementById('headerInput').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){const kw=e.target.value.trim();if(kw){document.getElementById('searchInput').value=kw;startSearch(kw);}}
 });
 const copyTrendBtn=document.getElementById('copy-trend-btn');
 if(copyTrendBtn) copyTrendBtn.addEventListener('click',copyTrendData);
