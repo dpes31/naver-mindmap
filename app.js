@@ -1,9 +1,11 @@
 // ── 설정 ──────────────────────────────────────────
 const DEPTH_COLORS  = ['#1a56db', '#22c55e', '#f59e0b', '#8b5cf6'];
-const DEPTH_RADIUS  = [44, 32, 24, 18];
+const DEPTH_RADIUS  = [44, 30, 22, 16];
 const DEPTH_OPACITY = [1, 0.92, 0.85, 0.80];
 const MAX_DEPTH     = 3;
-const BRANCH_LIMITS = [Infinity, 8, 4, 2];
+const MAX_NODES     = 500;
+const BRANCH_LIMITS = [Infinity, Infinity, 10, 3]; // depth1: 전체, depth2: 10개/부모, depth3: 3개/부모
+let currentKeyword  = '';
 
 // ── Naver Search Ads API (키워드 + 검색량) ──────────
 
@@ -95,10 +97,10 @@ function renderStats(keyword, items) {
   const wrap = document.getElementById('kw-cards');
   wrap.innerHTML = '';
 
-  // 검색어 자체를 첫 번째로 — 나머지 4개 상위 연관어
-  const top4 = items.filter(d => d.keyword !== keyword).slice(0, 4);
-  // 검색어 stats는 items에서 찾거나 zero
-  const rootItem = items.find(d=>d.keyword===keyword) || {keyword, totalVol:0,pcVol:0,mobileVol:0,pcClicks:0,mobileClicks:0,pcCtr:0,mobileCtr:0};
+  // 검색어 자체를 첫 번째로 — 나머지 4개 상위 연관어 (정규화 비교로 중복 방지)
+  const normKw = keyword.toLowerCase().trim();
+  const rootItem = items.find(d=>d.keyword.toLowerCase().trim()===normKw) || {keyword, totalVol:0,pcVol:0,mobileVol:0,pcClicks:0,mobileClicks:0,pcCtr:0,mobileCtr:0};
+  const top4 = items.filter(d => d.keyword.toLowerCase().trim()!==normKw).slice(0, 4);
   const cards = [rootItem, ...top4];
 
   const maxVol = Math.max(...cards.map(d=>d.pcVol+d.mobileVol), 1);
@@ -316,16 +318,20 @@ function renderGenderAge(data) {
   }
 }
 
-// ── 노드 반경 ─────────────────────────────────────────
+// ── 노드 반경 (sibling 수에 따라 가변) ───────────────────
 function nodeRadius(d) {
-  const base = DEPTH_RADIUS[Math.min(d.depth,3)];
-  const textMin = Math.max(base, d.label.length * 5.8 / 2 + 12);
+  const siblings = nodes.filter(n=>n.depth===d.depth).length;
+  // 형제 노드 수에 따라 기본 크기를 줄임 (최소 0.4x)
+  const sf = Math.max(0.4, Math.min(1, 16 / Math.max(siblings, 1)));
+  const base = Math.round(DEPTH_RADIUS[Math.min(d.depth,3)] * sf);
+  const fs   = d.depth===0 ? 13 : d.depth===1 ? Math.max(8, 11*sf) : Math.max(7, 10*sf);
+  const textMin = Math.max(base, d.label.length * fs * 0.55 + 8);
   if (!d.totalVol) return textMin;
-  const same=nodes.filter(n=>n.depth===d.depth&&n.totalVol>0);
+  const same = nodes.filter(n=>n.depth===d.depth&&n.totalVol>0);
   if (!same.length) return textMin;
-  const maxV=Math.max(...same.map(n=>n.totalVol),1);
-  const scale=Math.log1p(d.totalVol)/Math.log1p(maxV);
-  return Math.max(textMin, base+(scale-0.5)*14);
+  const maxV = Math.max(...same.map(n=>n.totalVol),1);
+  const scale = Math.log1p(d.totalVol)/Math.log1p(maxV);
+  return Math.max(textMin, base+(scale-0.5)*10*sf);
 }
 
 function linkWidth(d) {
@@ -386,11 +392,24 @@ svg.call(zoom).on('dblclick.zoom',null);
 const linksG=zoomG.append('g').attr('id','links');
 const nodesG=zoomG.append('g').attr('id','nodes');
 
+function boundingForce() {
+  const el=document.getElementById('graph');
+  const W=el.clientWidth||800, H=el.clientHeight||600, pad=60;
+  nodes.forEach(n=>{
+    if(n.depth===0) return;
+    if(n.x<pad)    n.vx+=(pad-n.x)*0.12;
+    if(n.x>W-pad)  n.vx+=(W-pad-n.x)*0.12;
+    if(n.y<pad)    n.vy+=(pad-n.y)*0.12;
+    if(n.y>H-pad)  n.vy+=(H-pad-n.y)*0.12;
+  });
+}
+
 const simulation=d3.forceSimulation()
-  .force('link',d3.forceLink().id(d=>d.id).distance(d=>80+(d.target?.depth||0)*60).strength(0.5))
-  .force('charge',d3.forceManyBody().strength(-350).distanceMax(600))
+  .force('link',d3.forceLink().id(d=>d.id).distance(d=>35+(d.target?.depth||0)*35).strength(0.7))
+  .force('charge',d3.forceManyBody().strength(-180).distanceMax(350))
   .force('center',d3.forceCenter(400,300))
-  .force('collision',d3.forceCollide().radius(d=>nodeRadius(d)+14))
+  .force('collision',d3.forceCollide().radius(d=>nodeRadius(d)+10))
+  .force('bounds',boundingForce)
   .alphaDecay(0.015)
   .velocityDecay(0.25);
 
@@ -403,9 +422,11 @@ function updateGraph() {
   const el=document.getElementById('graph');
   const W=el.clientWidth||800, H=el.clientHeight||600;
 
+  const d1count = nodes.filter(n=>n.depth===1).length;
+  const radStep = Math.max(60, Math.min(120, 800/Math.max(d1count,1)));
   simulation.force('radial', d3.forceRadial(
-    d => d.depth===0 ? 0 : d.depth*150, W/2, H/2
-  ).strength(d => d.depth===0 ? 1 : 0.38));
+    d => d.depth===0 ? 0 : d.depth*radStep, W/2, H/2
+  ).strength(d => d.depth===0 ? 1 : 0.7));
 
   const link=linksG.selectAll('line').data(links,d=>`${d.source?.id||d.source}→${d.target?.id||d.target}`);
   link.enter().append('line').attr('stroke-linecap','round');
@@ -530,11 +551,42 @@ function onClick(e,d) {
 }
 svg.on('click',()=>infoPanelEl.classList.remove('visible'));
 document.querySelector('.mindmap-content-wrap').addEventListener('mouseleave',()=>infoPanelEl.classList.remove('visible'));
-window.reSearch=kw=>{document.getElementById('searchInput').value=kw;startSearch(kw);};
+window.reSearch=kw=>{
+  document.getElementById('searchInput').value=kw;
+  const hdrIn=document.getElementById('headerInput');
+  if(hdrIn) hdrIn.value=kw;
+  startSearch(kw);
+};
+
+// ── 데이터 엑셀 다운로드 ─────────────────────────────────
+function downloadExcel() {
+  if(!nodes.length){showToast('데이터가 없습니다');return;}
+  const kw=currentKeyword||'mindmap';
+  const headers=['키워드','깊이','PC 검색량','MO 검색량','전체 검색량','PC 클릭율','MO 클릭율','경쟁도'];
+  const rows=nodes
+    .sort((a,b)=>a.depth-b.depth||b.totalVol-a.totalVol)
+    .map(n=>[
+      n.label,
+      n.depth===0?'검색어':`${n.depth}차 연관`,
+      n.pcVol||0, n.mobileVol||0, n.totalVol||0,
+      n.pcCtr?`${n.pcCtr}%`:'0%',
+      n.mobileCtr?`${n.mobileCtr}%`:'0%',
+      n.compIdx||'-',
+    ]);
+  const tsv='\ufeff'+[headers,...rows].map(r=>r.join('\t')).join('\n');
+  const blob=new Blob([tsv],{type:'text/tab-separated-values;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`naver_mindmap_${kw}_${new Date().toISOString().slice(0,10)}.xls`;
+  document.body.appendChild(a);a.click();
+  document.body.removeChild(a);URL.revokeObjectURL(url);
+  showToast('다운로드 완료!');
+}
 
 // ── BFS 전수 수집 ─────────────────────────────────────
 async function collectAll(rootKeyword, rootId, prefetchedRoot) {
-  const ESTIMATED = 41; // ~1+8+32
+  const d1count = prefetchedRoot?.length || 10;
+  const ESTIMATED = 1 + d1count + Math.min(d1count * 5, 80);
   let processed = 0;
   const barEl = document.getElementById('progress-bar');
   const progEl = document.getElementById('loading-progress');
@@ -562,7 +614,7 @@ async function collectAll(rootKeyword, rootId, prefetchedRoot) {
     queue.push({kw:rootKeyword,parentId:rootId,depth:1});
   }
 
-  while(queue.length>0&&nodes.length<300) {
+  while(queue.length>0&&nodes.length<MAX_NODES) {
     const batch=queue.splice(0,5);
     const results=await Promise.allSettled(batch.map(it=>fetchNaverKeywords(it.kw)));
     results.forEach((r,i)=>{
@@ -638,7 +690,9 @@ function showResults() {
 async function startSearch(keyword) {
   if(!keyword||isLoading) return;
   keyword=keyword.trim();
+  currentKeyword=keyword;
 
+  // 상태 초기화
   nodes=[];links=[];nodeIds.clear();
   linksG.selectAll('*').remove();nodesG.selectAll('*').remove();
   infoPanelEl.classList.remove('visible');
@@ -646,20 +700,20 @@ async function startSearch(keyword) {
   document.getElementById('kw-cards').innerHTML='';
   document.getElementById('trend-chart').innerHTML='';
 
-  showResults();
   // 헤더 인풋 동기화
   const hdrIn=document.getElementById('headerInput');
   if(hdrIn) hdrIn.value=keyword;
+
+  // 히어로에서 첫 검색이면 로딩은 히어로 위에 오버레이, 결과 노출은 완료 후
+  const isFirst=document.getElementById('results-wrap').classList.contains('hidden');
   setLoading(true,`"${keyword}" 수집 중...`);
   updateLegend(keyword);
 
   const rootId=keyword.toLowerCase();
   nodeIds.add(rootId);
-  const el=document.getElementById('graph');
-  const W=el.clientWidth||800,H=el.clientHeight||600;
   nodes.push({id:rootId,label:keyword,depth:0,
     totalVol:0,pcVol:0,mobileVol:0,pcClicks:0,mobileClicks:0,pcCtr:0,mobileCtr:0,
-    fx:W/2,fy:H/2});
+    fx:400,fy:300}); // 임시 좌표, showResults 후 실측으로 교체
 
   try {
     const [firstLevel, trendResult] = await Promise.all([
@@ -668,19 +722,27 @@ async function startSearch(keyword) {
     ]);
 
     // root 노드 stats 업데이트
-    const rootStats = firstLevel.find(d=>d.keyword.toLowerCase()===rootId) || firstLevel[0] || {};
+    const normKw=keyword.toLowerCase().trim();
+    const rootStats=firstLevel.find(d=>d.keyword.toLowerCase().trim()===normKw)||firstLevel[0]||{};
     const rn=nodes.find(n=>n.id===rootId);
     if(rn) Object.assign(rn,{totalVol:rootStats.totalVol||0,pcVol:rootStats.pcVol||0,mobileVol:rootStats.mobileVol||0});
 
-    // 전수 BFS 수집 (firstLevel 재활용으로 중복 API 호출 방지)
+    // 전수 BFS 수집
     await collectAll(keyword, rootId, firstLevel);
 
-    // 100% 완료 후 한번에 렌더
+    // 데이터 준비 완료 → 결과 화면 전환
     setLoading(false);
-    const pcAbs = rootStats.pcVol || 0;
-    const moAbs = rootStats.mobileVol || 0;
+    if(isFirst) showResults();
+
+    // 줌 리셋 + 실제 SVG 크기로 루트 좌표 업데이트
+    svg.call(zoom.transform, d3.zoomIdentity);
+    const graphEl=document.getElementById('graph');
+    const W=graphEl.clientWidth||800, H=graphEl.clientHeight||600;
+    if(rn){rn.fx=W/2;rn.fy=H/2;}
+
+    const pcAbs=rootStats.pcVol||0, moAbs=rootStats.mobileVol||0;
     renderStats(keyword, firstLevel);
-    renderTrendChart(trendResult?.trend || null, pcAbs, moAbs);
+    renderTrendChart(trendResult?.trend||null, pcAbs, moAbs);
     renderGenderAge(trendResult);
 
     if(nodes.length>1) {
@@ -694,6 +756,7 @@ async function startSearch(keyword) {
     console.error(e);
     showToast('오류가 발생했습니다. 다시 시도해주세요.');
     setLoading(false);
+    if(isFirst) showResults();
   }
 }
 
@@ -716,6 +779,8 @@ document.getElementById('headerInput').addEventListener('keydown',e=>{
 });
 const copyTrendBtn=document.getElementById('copy-trend-btn');
 if(copyTrendBtn) copyTrendBtn.addEventListener('click',copyTrendData);
+const dlBtn=document.getElementById('download-btn');
+if(dlBtn) dlBtn.addEventListener('click',downloadExcel);
 window.addEventListener('resize',()=>{
   const el=document.getElementById('graph');
   simulation.force('center',d3.forceCenter(el.clientWidth/2,el.clientHeight/2)).alpha(0.1).restart();

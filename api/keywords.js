@@ -68,7 +68,7 @@ module.exports = async (req, res) => {
         compIdx:      item.compIdx || '',
       }))
       .sort((a, b) => b.totalVol - a.totalVol)
-      .slice(0, 10);
+      .slice(0, 100);
 
     return res.status(200).json({ keywords });
   } catch (err) {

@@ -12,8 +12,7 @@
 <!-- ── 히어로 랜딩 (초기 화면) ── -->
 <section id="hero-section">
   <div class="hero-inner">
-    <div class="hero-brand">Naver <span>MindMap</span></div>
-    <h1 class="hero-title">Keyword Mindmap</h1>
+    <h1 class="hero-title">Keyword <span>Mindmap</span></h1>
     <p class="hero-sub">네이버 연관 검색어를 마인드맵으로 시각화합니다</p>
     <div class="hero-search-box">
       <input type="text" id="searchInput" placeholder="검색어를 입력하세요" autocomplete="off">
@@ -24,7 +23,7 @@
 
 <!-- ── 결과 화면 헤더 (검색 후 표시) ── -->
 <header id="site-header" class="hidden">
-  <div class="brand">Naver <span>MindMap</span></div>
+  <div class="brand">Keyword <span>Mindmap</span></div>
   <div class="header-search-wrap">
     <input type="text" id="headerInput" placeholder="다른 검색어 입력..." autocomplete="off">
     <button id="headerBtn">검색</button>
@@ -94,6 +93,7 @@
           <div class="mm-legend-item"><div class="mm-dot" style="background:#f59e0b"></div>2차 연관</div>
           <div class="mm-legend-item"><div class="mm-dot" style="background:#8b5cf6"></div>3차 연관</div>
         </div>
+        <button id="download-btn" class="mm-download-btn">⬇ 데이터 다운로드</button>
       </div>
       <div class="mindmap-content">
         <svg id="graph"></svg>
