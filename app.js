@@ -946,7 +946,6 @@ async function startSearch(keyword) {
   infoPanelEl.classList.remove('visible');
   emptyState.classList.add('hidden');
   document.getElementById('kw-cards').innerHTML='';
-  document.getElementById('trend-chart').innerHTML='';
 
   // 헤더 인풋 동기화
   const hdrIn=document.getElementById('headerInput');
@@ -988,10 +987,8 @@ async function startSearch(keyword) {
     const W=graphEl.clientWidth||800, H=graphEl.clientHeight||600;
     if(rn){rn.fx=W/2;rn.fy=H/2;}
 
-    const pcAbs=rootStats.pcVol||0, moAbs=rootStats.mobileVol||0;
     renderStats(keyword, firstLevel);
-    renderTrendChart(trendResult?.trend||null, pcAbs, moAbs);
-    renderGenderAge(trendResult);
+    renderGenderAge(trendResult);  // 성별/연령: DataLab (유일한 공개 소스)
 
     if(nodes.length>1) {
       updateGraph();

@@ -191,6 +191,15 @@ header.hidden { display: none; }
   gap: 20px;
   align-items: stretch;
 }
+.stats-body--full {
+  grid-template-columns: 1fr;
+}
+.cards-wrap--full {
+  background: rgba(255,255,255,0.50);
+  border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
 
 /* 추이 패널 / 카드 래퍼 */
 .trend-panel {
