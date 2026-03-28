@@ -20,34 +20,37 @@
 <main>
 <div class="page-wrap">
 
-  <!-- ── 월간 검색량 섹션 ── -->
+  <!-- ── 월간 검색량 + 연관 키워드 ── -->
   <section class="stats-section">
-    <div class="stats-top-header">
-      <span class="stats-main-title">월간 검색량</span>
-      <span class="stats-kw-badge" id="stats-kw-badge"></span>
-    </div>
-    <div class="legend-row">
-      <div class="legend-item"><div class="legend-dot" style="background:#1a56db"></div>PC 검색수</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>Mobile 검색수</div>
-      <span class="legend-note">검색량 많은 순 정렬 · TOP 5</span>
-    </div>
-
     <div class="stats-body">
+
       <!-- 좌: 추이 차트 -->
       <div class="trend-panel">
-        <div class="trend-panel-title">
-          키워드 : <span id="trend-panel-kw"></span>
-          <button id="copy-trend-btn" class="copy-btn" title="월별 데이터 Excel 복사">📋 복사</button>
+        <div class="panel-header-row">
+          <span class="panel-main-title">월간 검색량</span>
+          <button id="copy-trend-btn" class="copy-btn" title="Excel 복사">📋 복사</button>
         </div>
-        <div class="trend-panel-sub">월별 검색수 추이 (최근 1년) · 절대값 기준</div>
-        <div class="trend-legend-row" id="trend-legend"></div>
+        <div class="panel-sub-row">
+          <div class="legend-item"><div class="legend-dot" style="background:#1a56db"></div>PC 검색수</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>Mobile 검색수</div>
+          <span class="panel-sub-note">월별 검색수 추이 (최근 1년) · 절대값 기준</span>
+        </div>
         <div id="trend-chart"></div>
       </div>
 
       <!-- 우: 키워드 카드 5개 -->
-      <div class="cards-panel" id="kw-cards">
-        <p style="color:#9ca3af;font-size:13px;padding:16px 0">검색어를 입력하면 TOP 5 키워드 통계가 표시됩니다.</p>
+      <div class="cards-wrap">
+        <div class="panel-header-row">
+          <span class="panel-main-title">연관 키워드</span>
+        </div>
+        <div class="panel-sub-row">
+          <span class="panel-sub-note" style="margin-left:auto">검색량 많은 순 정렬 · TOP 5</span>
+        </div>
+        <div class="cards-panel" id="kw-cards">
+          <p style="color:#9ca3af;font-size:13px;padding:16px 0">검색어를 입력하면 TOP 5 키워드 통계가 표시됩니다.</p>
+        </div>
       </div>
+
     </div>
   </section>
 
@@ -59,7 +62,7 @@
     </div>
     <div class="ga-card" id="age-section">
       <div class="ga-title">연령별 검색 비율</div>
-      <div class="ga-placeholder">DataLab 연령별 API 추가 연동 예정</div>
+      <div class="ga-placeholder">검색어를 입력하면 표시됩니다</div>
     </div>
   </div>
 
@@ -69,7 +72,7 @@
   <section class="mindmap-outer">
     <div class="mindmap-margin"></div>
 
-    <div class="mindmap-content">
+    <div class="mindmap-content-wrap">
       <div class="mindmap-header">
         <span class="mindmap-title">연관 키워드 마인드맵</span>
         <div class="mm-legend" id="mm-legend">
@@ -79,13 +82,13 @@
           <div class="mm-legend-item"><div class="mm-dot" style="background:#8b5cf6"></div>3차 연관</div>
         </div>
       </div>
-
-      <svg id="graph"></svg>
-
-      <div id="empty-state">
-        <div class="empty-icon">🔍</div>
-        <div class="empty-title">키워드를 검색하세요</div>
-        <div class="empty-sub">네이버 연관 검색어를 마인드맵으로 시각화합니다</div>
+      <div class="mindmap-content">
+        <svg id="graph"></svg>
+        <div id="empty-state">
+          <div class="empty-icon">🔍</div>
+          <div class="empty-title">키워드를 검색하세요</div>
+          <div class="empty-sub">네이버 연관 검색어를 마인드맵으로 시각화합니다</div>
+        </div>
       </div>
     </div>
 
@@ -102,6 +105,7 @@
 </div>
 <div id="toast"></div>
 <div id="tooltip"></div>
+<div id="chart-tooltip" class="chart-tooltip"></div>
 <div id="info-panel"></div>
 
 <script src="app.js"></script>

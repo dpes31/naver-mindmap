@@ -92,8 +92,6 @@ function fmtCtr(v) { return (v||0)+'%'; }
 
 // ── 통계 카드 렌더 (TOP 5: 검색어 + 후순위 4개) ─────────
 function renderStats(keyword, items) {
-  document.getElementById('stats-kw-badge').textContent = keyword;
-  document.getElementById('trend-panel-kw').textContent = keyword;
   const wrap = document.getElementById('kw-cards');
   wrap.innerHTML = '';
 
@@ -221,6 +219,36 @@ function renderTrendChart(trendData, pcAbsNow, moAbsNow) {
       .attr('cx',xPos).attr('cy',d=>y(d[k])).attr('r',3.5)
       .attr('fill',c).attr('stroke','#fff').attr('stroke-width',1.5);
   });
+
+  // ── 호버 툴팁 ──
+  const hoverG = svg.append('g').attr('pointer-events','none').style('display','none');
+  hoverG.append('line').attr('class','h-line').attr('y1',0).attr('y2',h)
+    .attr('stroke','#cbd5e1').attr('stroke-width',1.5).attr('stroke-dasharray','4,3');
+  hoverG.append('circle').attr('class','h-dot-pc').attr('r',6).attr('fill','#1a56db').attr('stroke','#fff').attr('stroke-width',2);
+  hoverG.append('circle').attr('class','h-dot-mo').attr('r',6).attr('fill','#16a34a').attr('stroke','#fff').attr('stroke-width',2);
+
+  const chartTip = document.getElementById('chart-tooltip');
+  svg.append('rect').attr('width',w).attr('height',h).attr('fill','none').attr('pointer-events','all')
+    .on('mousemove', function(event) {
+      const [mx] = d3.pointer(event);
+      let ni=0, minD=Infinity;
+      data.forEach((d,i)=>{const cx=xPos(d);const dist=Math.abs(cx-mx);if(dist<minD){minD=dist;ni=i;}});
+      const d=data[ni]; const cx=xPos(d);
+      hoverG.style('display',null);
+      hoverG.select('.h-line').attr('x1',cx).attr('x2',cx);
+      hoverG.select('.h-dot-pc').attr('cx',cx).attr('cy',y(d.pc));
+      hoverG.select('.h-dot-mo').attr('cx',cx).attr('cy',y(d.mo));
+      const rect=container.getBoundingClientRect();
+      const ttx=rect.left+margin.left+cx+16;
+      const tty=rect.top+margin.top+Math.min(y(d.pc),y(d.mo))-12;
+      chartTip.innerHTML=`<div class="ct-date">${d.period}</div>
+        <div class="ct-row"><span class="ct-dot" style="background:#1a56db"></span>PC Desktop<b>${d.pc.toLocaleString()}건</b></div>
+        <div class="ct-row"><span class="ct-dot" style="background:#16a34a"></span>mobile<b>${d.mo.toLocaleString()}건</b></div>`;
+      chartTip.style.left=Math.min(ttx,window.innerWidth-180)+'px';
+      chartTip.style.top=Math.max(tty,60)+'px';
+      chartTip.classList.add('visible');
+    })
+    .on('mouseleave',()=>{hoverG.style('display','none');chartTip.classList.remove('visible');});
 }
 
 // ── 성별/연령 렌더 ────────────────────────────────────
@@ -302,10 +330,8 @@ function nodeRadius(d) {
 
 function linkWidth(d) {
   const t=nodes.find(n=>n.id===(d.target?.id||d.target));
-  if (!t?.totalVol) return 1.5;
-  const same=nodes.filter(n=>n.depth===t.depth&&n.totalVol>0);
-  const maxV=Math.max(...same.map(n=>n.totalVol),1);
-  return 1+Math.log1p(t.totalVol)/Math.log1p(maxV)*5;
+  // 선 두께 균일 (depth별 미세 차이만)
+  return t?.depth===1 ? 2 : t?.depth===2 ? 1.5 : 1.2;
 }
 
 function hexToRgba(hex, a) {
@@ -373,8 +399,9 @@ function updateGraph() {
   const enter=node.enter().append('g').attr('class','node-group')
     .style('opacity',0).style('cursor','pointer')
     .call(d3.drag()
-      .on('start',(e,d)=>{if(!e.active)simulation.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;})
-      .on('drag', (e,d)=>{d.fx=e.x;d.fy=e.y;})
+      .on('start',(e,d)=>{if(!e.active)simulation.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;tooltipEl.classList.remove('visible');})
+      .on('drag', (e,d)=>{d.fx=e.x;d.fy=e.y;
+        if(e.sourceEvent){tooltipEl.style.left=(e.sourceEvent.clientX+14)+'px';tooltipEl.style.top=(e.sourceEvent.clientY-8)+'px';}})
       .on('end',  (e,d)=>{if(!e.active)simulation.alphaTarget(0);d.fx=null;d.fy=null;}))
     .on('mouseenter',onHover).on('mouseleave',onLeave).on('click',onClick);
 
@@ -452,17 +479,36 @@ function onLeave(e,d) {
 function onClick(e,d) {
   e.stopPropagation();
   if(isLoading) return;
-  const clicks=(d.pcClicks||0)+(d.mobileClicks||0);
+  const maxV = Math.max(d.pcVol, d.mobileVol, 1);
+  const pcPct = d.pcVol ? Math.max(2, Math.round(d.pcVol/maxV*100)) : 0;
+  const moPct = d.mobileVol ? Math.max(2, Math.round(d.mobileVol/maxV*100)) : 0;
   infoPanelEl.innerHTML=`
-    <strong>${d.label}</strong>
-    <span style="font-size:11px;color:#6b7280">${d.depth}차 연관어</span>
-    ${d.totalVol?`<div class="info-metric">
-      <div class="info-metric-row"><span class="k">PC 검색</span><span class="v" style="color:#1a56db">${fmtN(d.pcVol)}</span></div>
-      <div class="info-metric-row"><span class="k">MO 검색</span><span class="v" style="color:#16a34a">${fmtN(d.mobileVol)}</span></div>
-      <div class="info-metric-row"><span class="k">클릭수</span><span class="v">${fmtN(clicks)}</span></div>
-      <div class="info-metric-row"><span class="k">PC CTR</span><span class="v">${fmtCtr(d.pcCtr)}</span></div>
-      <div class="info-metric-row"><span class="k">MO CTR</span><span class="v">${fmtCtr(d.mobileCtr)}</span></div>
-    </div>`:''}
+    <div class="info-card-header">
+      <span class="info-kw">${d.label}</span>
+      <span class="info-depth">${d.depth}차 연관어</span>
+    </div>
+    ${d.totalVol ? `
+    <div class="card-bars">
+      <div class="card-bar-row">
+        <span class="card-bar-label pc">PC</span>
+        <div class="card-bar-track"><div class="card-bar-fill pc" style="width:${pcPct}%"></div></div>
+        <span class="card-bar-val">${(d.pcVol||0).toLocaleString()}</span>
+      </div>
+      <div class="card-bar-row">
+        <span class="card-bar-label mo">MO</span>
+        <div class="card-bar-track"><div class="card-bar-fill mo" style="width:${moPct}%"></div></div>
+        <span class="card-bar-val">${(d.mobileVol||0).toLocaleString()}</span>
+      </div>
+    </div>
+    <div class="card-detail">
+      <table class="card-detail-table">
+        <thead><tr><th></th><th>검색량</th><th>클릭율</th></tr></thead>
+        <tbody>
+          <tr><td>PC</td><td><b>${fmtN(d.pcVol)}</b></td><td>${fmtCtr(d.pcCtr)}</td></tr>
+          <tr><td>MO</td><td><b>${fmtN(d.mobileVol)}</b></td><td>${fmtCtr(d.mobileCtr)}</td></tr>
+        </tbody>
+      </table>
+    </div>` : '<div style="font-size:12px;color:#9ca3af;padding:8px 0">검색량 데이터 없음</div>'}
     <div class="hint" onclick="window.reSearch('${d.label.replace(/'/g,"\\'")}')">이 키워드로 새 검색 →</div>`;
   infoPanelEl.classList.add('visible');
 }
@@ -569,7 +615,6 @@ async function startSearch(keyword) {
   infoPanelEl.classList.remove('visible');
   emptyState.classList.add('hidden');
   document.getElementById('kw-cards').innerHTML='';
-  document.getElementById('stats-kw-badge').textContent='';
   document.getElementById('trend-chart').innerHTML='';
 
   setLoading(true,`"${keyword}" 수집 중...`);
