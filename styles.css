@@ -210,6 +210,7 @@ header.hidden { display: none; }
   display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted);
 }
 .tl-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.tl-note { font-size: 10px; color: #9ca3af; margin-left: 4px; align-self: center; }
 .copy-btn {
   padding: 4px 10px; font-size: 11px; font-weight: 600;
   border: 1px solid rgba(0,0,0,0.1); border-radius: 7px;
