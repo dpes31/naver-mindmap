@@ -1,13 +1,20 @@
 // ── 설정 ──────────────────────────────────────────
-const DEPTH_COLORS   = ['#1a56db', '#22c55e', '#f59e0b', '#8b5cf6'];
-const CLUSTER_COLORS = ['#3b82f6','#16a34a','#f59e0b','#ec4899','#8b5cf6','#0ea5e9','#f97316'];
-const DEPTH_RADIUS   = [44, 26, 18, 14];
-const DEPTH_OPACITY  = [1, 0.92, 0.85, 0.80];
-const MAX_DEPTH      = 2;
-const MAX_D1         = 25;  // depth-1 최대
-const MAX_D2_PARENTS = 5;   // depth-2 확장할 depth-1 수 (API 1배치)
-const MAX_D2_PER     = 4;   // depth-2 부모당 최대
-const MAX_LINKS_SHOW = 40;  // 표시 링크 최대
+const ROOT_COLOR     = '#1e3a5f';   // 검색어 노드 (딥 네이비)
+const HUB_COLORS     = ['#3b82f6','#ef4444','#10b981','#f59e0b','#8b5cf6']; // TOP5 허브 고유색
+const NON_HUB_COLOR  = '#94a3b8';   // 기타 1차 연관 (슬레이트)
+const D3_COLOR       = '#c8d6e5';   // 3차 연관 (연한 회색-블루)
+const CLUSTER_COLORS = HUB_COLORS;  // 호환성
+
+// 레전드용
+const DEPTH_COLORS   = [ROOT_COLOR, HUB_COLORS[0], NON_HUB_COLOR, D3_COLOR];
+const DEPTH_OPACITY  = [1, 1, 0.85, 0.75];
+
+const MAX_HUB        = 5;   // TOP5 허브 노드
+const MAX_D1         = 9;   // 허브 제외 기타 1차 (총 depth-1=14)
+const MAX_D2_PER     = 5;   // 허브당 depth-2 수 (5×5=25)
+const MAX_D3_PER     = 2;   // 허브당 depth-3 수 (5×1×2=10) → 총 50
+const MAX_LINKS_SHOW = 60;
+const MAX_DEPTH      = 3;
 let currentClusters  = [];
 let currentKeyword   = '';
 
@@ -322,47 +329,38 @@ function renderGenderAge(data) {
   }
 }
 
-// ── 노드 반경 (sibling 수에 따라 가변) ───────────────────
+// ── 노드 반경 (역할별 고정 크기) ─────────────────────────
 function nodeRadius(d) {
-  const siblings = nodes.filter(n=>n.depth===d.depth).length;
-  // 형제 노드 수에 따라 기본 크기를 줄임 (최소 0.4x)
-  const sf = Math.max(0.4, Math.min(1, 16 / Math.max(siblings, 1)));
-  const base = Math.round(DEPTH_RADIUS[Math.min(d.depth,3)] * sf);
-  const fs   = d.depth===0 ? 13 : d.depth===1 ? Math.max(8, 11*sf) : Math.max(7, 10*sf);
-  const textMin = Math.max(base, d.label.length * fs * 0.55 + 8);
-  if (!d.totalVol) return textMin;
-  const same = nodes.filter(n=>n.depth===d.depth&&n.totalVol>0);
-  if (!same.length) return textMin;
-  const maxV = Math.max(...same.map(n=>n.totalVol),1);
-  const scale = Math.log1p(d.totalVol)/Math.log1p(maxV);
-  return Math.max(textMin, base+(scale-0.5)*10*sf);
+  if (d.depth === 0) return 46;        // 검색어 (대형)
+  if (d.isHub)       return 28;        // TOP5 허브 (중형)
+  if (d.depth === 1) return 13;        // 기타 1차 (소형)
+  if (d.depth === 2) return 17;        // 2차 (중소형)
+  if (d.depth === 3) return 10;        // 3차 (소형)
+  return 13;
 }
 
 function linkWidth(d) {
   const t=nodes.find(n=>n.id===(d.target?.id||d.target));
-  const base = t?.depth===1 ? 2 : t?.depth===2 ? 1.5 : 1.2;
-  // 검색량 있으면 두께도 비례 보정 (+0 ~ +0.8)
-  if (t?.totalVol > 0) {
-    const same = nodes.filter(n=>n.depth===t.depth&&n.totalVol>0);
-    const maxV = Math.max(...same.map(n=>n.totalVol), 1);
-    const ratio = Math.log1p(t.totalVol) / Math.log1p(maxV);
-    return +(base + ratio * 0.8).toFixed(2);
-  }
-  return base;
+  if (!t) return 1;
+  if (t.isHub)     return 2.2;
+  if (t.depth===1) return 1.0;
+  if (t.depth===2) return 1.5;
+  if (t.depth===3) return 0.8;
+  return 1;
 }
 
 function hexToRgba(hex, a) {
   const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
   return `rgba(${r},${g},${b},${a})`;
 }
-// 링크 색: depth 기준 (노드와 동일 depth 색)
+// 링크 색: 허브 색 계열 기반
 function linkColor(d) {
   const t=nodes.find(n=>n.id===(d.target?.id||d.target));
-  if (!t) return 'rgba(160,174,192,0.20)';
-  const col=DEPTH_COLORS[Math.min(t.depth,3)];
-  const s=d.strength||0.3;
-  const alpha=Math.min(0.65, 0.15+s*1.6);
-  return hexToRgba(col,alpha);
+  if (!t) return 'rgba(148,163,184,0.18)';
+  if (t.depth===3) return 'rgba(200,214,229,0.25)';
+  if (t.depth===1 && !t.isHub) return 'rgba(148,163,184,0.22)';
+  if (t.hubIdx!=null) return hexToRgba(HUB_COLORS[t.hubIdx], 0.38);
+  return 'rgba(148,163,184,0.20)';
 }
 
 // ── 연관성 점수 (API 순위 × 검색량) ─────────────────────
@@ -372,73 +370,16 @@ function relevanceScore(item, idx) {
   return +(posScore * 0.55 + volScore * 0.45).toFixed(4);
 }
 
-// ── 의미 기반 클러스터 레이블 추출 ──────────────────────────
-// 루트 키워드를 제거한 잉여 토큰의 빈도로 주제어 결정
-function extractClusterLabel(items, rootKw) {
-  const freq={};
-  items.forEach(item=>{
-    const kw=item.keyword||item.label||'';
-    // 루트 키워드 제거 (부분 매치 포함)
-    let residual=kw;
-    for(let len=rootKw.length; len>=2; len--) {
-      const p=rootKw.slice(0,len);
-      if(kw.includes(p)){residual=kw.replace(p,'').trim();break;}
-    }
-    if(residual===kw||!residual) residual=kw;
-    // 2~3글자 토큰 빈도 집계
-    for(let len=2;len<=3;len++) {
-      for(let i=0;i<=residual.length-len;i++) {
-        const tok=residual.slice(i,i+len).trim();
-        if(tok.length===len) freq[tok]=(freq[tok]||0)+1;
-      }
-    }
-  });
-  // 2개 이상 키워드에 등장한 토큰 중 가장 빈출
-  const best=Object.entries(freq)
-    .filter(([,cnt])=>cnt>=Math.min(2,items.length))
-    .sort((a,b)=>b[1]-a[1]);
-  // 3글자 우선, 없으면 2글자
-  const b3=best.find(([t])=>t.length===3);
-  const b2=best.find(([t])=>t.length===2);
-  const label=b3?.[0]||b2?.[0]||'';
-  if(label) return label;
-  // fallback: 가장 높은 점수 키워드의 마지막 2글자
-  const rep=[...items].sort((a,b)=>(b._score||0)-(a._score||0))[0];
-  const repKw=rep?.keyword||rep?.label||'';
-  return repKw.replace(rootKw,'').trim().slice(0,3)||repKw.slice(-3)||repKw.slice(0,3);
-}
-
-// ── 바이그램 클러스터링 ──────────────────────────────────
-function bigrams(str) {
-  const s = new Set();
-  for (let i=0; i<str.length-1; i++) s.add(str.slice(i,i+2));
-  return s;
-}
-function bigramSim(a, b) {
-  const ba=bigrams(a), bb=bigrams(b);
-  const union=new Set([...ba,...bb]).size||1;
-  return [...ba].filter(g=>bb.has(g)).length / union;
-}
-function buildClusters(items, rootKw='') {
-  const MAX_CL=7, MIN_SIM=0.18;
-  const clusters=[];
-  [...items].sort((a,b)=>(b._score||0)-(a._score||0)).forEach(item=>{
-    const kw=item.keyword||item.label||'';
-    let best=null, bestSim=MIN_SIM;
-    clusters.forEach(c=>{
-      const avg=(c.items.reduce((s,ci)=>s+bigramSim(kw,ci.keyword||ci.label||''),0)/c.items.length)||0;
-      if(avg>bestSim){bestSim=avg;best=c;}
-    });
-    if(best&&best.items.length<9){best.items.push(item);}
-    else if(clusters.length<MAX_CL){clusters.push({id:`cl-${clusters.length}`,items:[item],color:CLUSTER_COLORS[clusters.length%CLUSTER_COLORS.length]});}
-    else{let b2=clusters[0],b2s=-1;clusters.forEach(c=>{const a=(c.items.reduce((s,ci)=>s+bigramSim(kw,ci.keyword||ci.label||''),0)/c.items.length)||0;if(a>b2s){b2s=a;b2=c;}});b2.items.push(item);}
-  });
-  clusters.forEach(c=>{
-    c.totalScore=c.items.reduce((s,i)=>s+(i._score||0),0);
-    // 의미 기반 레이블 (루트 키워드 제거 후 빈출 토큰)
-    c.label=extractClusterLabel(c.items, rootKw)||c.items[0]?.keyword?.slice(0,4)||'기타';
-  });
-  return clusters.sort((a,b)=>b.totalScore-a.totalScore);
+// ── 허브(TOP5) 기반 클러스터 생성 ─────────────────────────
+// 각 허브 노드가 하나의 클러스터를 형성 (색상 + halo용)
+function buildHubClusters(hubItems) {
+  return hubItems.map((item, i) => ({
+    id: `hub-${i}`,
+    hubIdx: i,
+    label: item.keyword || '',  // 허브 키워드 자체가 레이블
+    color: HUB_COLORS[i % HUB_COLORS.length],
+    items: [item],
+  }));
 }
 
 // ── 클러스터 헐(hull) 패스 ───────────────────────────────
@@ -477,11 +418,21 @@ function lighten(hex,a) {
   const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
   return `rgb(${Math.min(255,Math.round(r+(255-r)*a))},${Math.min(255,Math.round(g+(255-g)*a))},${Math.min(255,Math.round(b+(255-b)*a))})`;
 }
-DEPTH_COLORS.forEach((c,i)=>{
-  const gr=defs.append('radialGradient').attr('id',`grad-${i}`).attr('cx','35%').attr('cy','35%').attr('r','65%');
-  gr.append('stop').attr('offset','0%').attr('stop-color',lighten(c,0.35)).attr('stop-opacity',DEPTH_OPACITY[i]);
-  gr.append('stop').attr('offset','100%').attr('stop-color',c).attr('stop-opacity',DEPTH_OPACITY[i]);
-});
+function makeGradient(id, color, opacity=1) {
+  const gr=defs.append('radialGradient').attr('id',id).attr('cx','35%').attr('cy','35%').attr('r','65%');
+  gr.append('stop').attr('offset','0%').attr('stop-color',lighten(color,0.40)).attr('stop-opacity',opacity);
+  gr.append('stop').attr('offset','100%').attr('stop-color',color).attr('stop-opacity',opacity);
+}
+// 루트 노드 그라디언트
+makeGradient('grad-root', ROOT_COLOR, 1);
+// TOP5 허브 각 고유색 그라디언트
+HUB_COLORS.forEach((c,i) => makeGradient(`grad-hub-${i}`, c, 1));
+// 기타 1차 (슬레이트)
+makeGradient('grad-nonhub', NON_HUB_COLOR, 0.88);
+// 3차 연관 (연한 회색)
+makeGradient('grad-d3', D3_COLOR, 0.80);
+// 레거시 (링크등 일부 호환)
+DEPTH_COLORS.forEach((c,i)=>makeGradient(`grad-${i}`,c,DEPTH_OPACITY[i]));
 
 const zoomG=svg.append('g').attr('id','zoom-layer');
 const zoom=d3.zoom().scaleExtent([0.1,5]).on('zoom',e=>zoomG.attr('transform',e.transform));
@@ -504,67 +455,103 @@ function boundingForce() {
 }
 
 const simulation=d3.forceSimulation()
-  .force('link',d3.forceLink().id(d=>d.id).distance(28).strength(0.5))
-  .force('charge',d3.forceManyBody().strength(-90).distanceMax(200))
+  .force('link',d3.forceLink().id(d=>d.id).distance(32).strength(0.45))
+  .force('charge',d3.forceManyBody().strength(d=>d.depth===0?-300:d.isHub?-160:d.depth===3?-40:-80).distanceMax(250))
   .force('center',d3.forceCenter(400,300))
-  .force('collision',d3.forceCollide().radius(d=>nodeRadius(d)+10))
+  .force('collision',d3.forceCollide().radius(d=>nodeRadius(d)+8))
   .force('bounds',boundingForce)
-  .alphaDecay(0.018)
-  .velocityDecay(0.30);
+  .alphaDecay(0.016)
+  .velocityDecay(0.28);
 
 let nodes=[],links=[];
 const nodeIds=new Set();
 let isLoading=false;
+
+// ── 노드 fill / glow 색상 ────────────────────────────────
+function nodeFill(d) {
+  if (d.depth===0) return 'url(#grad-root)';
+  if (d.isHub)     return `url(#grad-hub-${d.hubIdx})`;
+  if (d.depth===1) return 'url(#grad-nonhub)';
+  if (d.depth===3) return 'url(#grad-d3)';
+  if (d.depth===2 && d.hubIdx!=null) return `url(#grad-hub-${d.hubIdx})`;
+  return 'url(#grad-nonhub)';
+}
+function nodeGlowColor(d) {
+  if (d.depth===0) return ROOT_COLOR;
+  if (d.isHub || (d.depth===2 && d.hubIdx!=null)) return HUB_COLORS[d.hubIdx]||NON_HUB_COLOR;
+  if (d.depth===3) return D3_COLOR;
+  return NON_HUB_COLOR;
+}
+function nodeTextColor(d) {
+  // 어두운 배경 → 흰 텍스트, 밝은 배경 → 어두운 텍스트
+  if (d.depth===0 || d.isHub) return '#ffffff';
+  if (d.depth===3) return '#64748b';
+  return '#111827';
+}
 
 // ── 그래프 렌더 ───────────────────────────────────────
 function updateGraph() {
   const el=document.getElementById('graph');
   const W=el.clientWidth||800, H=el.clientHeight||600;
 
-  const innerR = Math.min(W,H)*0.28;
-  const outerR = Math.min(W,H)*0.46;
-  const clCount = currentClusters.length||1;
-  // 클러스터 섹터 중심 각도
-  const clAngles = currentClusters.map((_,ci)=>(ci/clCount)*2*Math.PI - Math.PI/2);
+  // 반경: 허브 링 / 2차 링 / 3차 링
+  const hubR  = Math.min(W,H)*0.22;
+  const d2R   = Math.min(W,H)*0.42;
+  const d3R   = Math.min(W,H)*0.62;
 
-  // 클러스터 내 노드를 깊이별로 분류 → 부채꼴 분산용 인덱스 계산
-  const clMemberMap = {};
+  // 허브 각도 (TOP5 균등 배치)
+  const hubNodes = nodes.filter(n=>n.isHub);
+  const hubAngles = hubNodes.map((_,i)=>(i/hubNodes.length)*2*Math.PI - Math.PI/2);
+
+  // 허브별 depth-2, depth-3 멤버 인덱스 → 부채꼴 오프셋
+  const memberMap={};
   nodes.forEach(n=>{
-    if(n.depth===0||n.clusterIdx==null) return;
-    const key=`${n.clusterIdx}-${n.depth}`;
-    if(!clMemberMap[key]) clMemberMap[key]=[];
-    clMemberMap[key].push(n.id);
+    if(n.depth<2||n.hubIdx==null) return;
+    const key=`${n.hubIdx}-${n.depth}`;
+    if(!memberMap[key]) memberMap[key]=[];
+    memberMap[key].push(n.id);
   });
-  // 클러스터 내 같은 depth 노드들을 부채꼴로 펼치는 각도 오프셋
-  function nodeAngleOffset(n) {
-    const key=`${n.clusterIdx}-${n.depth}`;
-    const members=clMemberMap[key]||[];
-    const idx=members.indexOf(n.id);
-    const count=members.length;
-    if(count<=1) return 0;
-    // depth-1: ±35°, depth-2: ±25° 범위로 분산
-    const spread=n.depth===1?(Math.PI/180*35):(Math.PI/180*25);
-    return (idx/(count-1)-0.5)*2*spread;
+  function angleOffset(n) {
+    const key=`${n.hubIdx}-${n.depth}`;
+    const ms=memberMap[key]||[];
+    const idx=ms.indexOf(n.id), cnt=ms.length;
+    if(cnt<=1) return 0;
+    const spread=n.depth===2?(Math.PI/180*32):(Math.PI/180*18);
+    return (idx/(cnt-1)-0.5)*2*spread;
   }
 
-  // 노드별 목표 좌표 함수 (클러스터 중심 + 부채꼴 오프셋)
-  function targetX(n) {
-    if(n.depth===0||n.clusterIdx==null) return W/2;
-    const angle=(clAngles[n.clusterIdx]||0)+nodeAngleOffset(n);
-    return W/2+Math.cos(angle)*(n.depth===1?innerR:outerR);
+  // 목표 좌표
+  function tx(n) {
+    if(n.depth===0) return W/2;
+    if(n.isHub) return W/2+Math.cos(hubAngles[n.hubIdx])*hubR;
+    if(n.depth===1) return W/2;  // 비허브 1차: 중심 근처
+    if(n.hubIdx==null) return W/2;
+    const ang=hubAngles[n.hubIdx]+angleOffset(n);
+    return W/2+Math.cos(ang)*(n.depth===2?d2R:d3R);
   }
-  function targetY(n) {
-    if(n.depth===0||n.clusterIdx==null) return H/2;
-    const angle=(clAngles[n.clusterIdx]||0)+nodeAngleOffset(n);
-    return H/2+Math.sin(angle)*(n.depth===1?innerR:outerR);
+  function ty(n) {
+    if(n.depth===0) return H/2;
+    if(n.isHub) return H/2+Math.sin(hubAngles[n.hubIdx])*hubR;
+    if(n.depth===1) return H/2;
+    if(n.hubIdx==null) return H/2;
+    const ang=hubAngles[n.hubIdx]+angleOffset(n);
+    return H/2+Math.sin(ang)*(n.depth===2?d2R:d3R);
   }
-  // forceX/Y로 섹터 고정 (alpha 독립적으로 강하게 유지)
+  function forceStr(n) {
+    if(n.depth===0) return 0;
+    if(n.isHub)     return 0.92;
+    if(n.depth===1) return 0.12;   // 비허브: 느슨하게 중심 주변
+    if(n.depth===2) return 0.80;
+    if(n.depth===3) return 0.72;
+    return 0;
+  }
+
   simulation
-    .force('clusterX', d3.forceX(targetX).strength(n=>n.depth===0?0:0.78))
-    .force('clusterY', d3.forceY(targetY).strength(n=>n.depth===0?0:0.78))
-    .force('radial',null);
+    .force('clusterX', d3.forceX(tx).strength(forceStr))
+    .force('clusterY', d3.forceY(ty).strength(forceStr))
+    .force('radial', null);
 
-  // 강도 상위 MAX_LINKS_SHOW개만 표시
+  // 링크 (강도 상위 MAX_LINKS_SHOW개)
   const shownLinks=[...links].sort((a,b)=>(b.strength||0)-(a.strength||0)).slice(0,MAX_LINKS_SHOW);
   const link=linksG.selectAll('line').data(shownLinks,d=>`${d.source?.id||d.source}→${d.target?.id||d.target}`);
   link.enter().append('line').attr('stroke-linecap','round');
@@ -575,39 +562,44 @@ function updateGraph() {
     .style('opacity',0).style('cursor','pointer')
     .call(d3.drag()
       .on('start',(e,d)=>{if(!e.active)simulation.alphaTarget(0.1).restart();d.fx=d.x;d.fy=d.y;tooltipEl.classList.remove('visible');})
-      .on('drag', (e,d)=>{d.fx=e.x;d.fy=e.y;
+      .on('drag',(e,d)=>{d.fx=e.x;d.fy=e.y;
         if(e.sourceEvent){tooltipEl.style.left=(e.sourceEvent.clientX+14)+'px';tooltipEl.style.top=(e.sourceEvent.clientY-8)+'px';}})
-      .on('end',  (e,d)=>{if(!e.active)simulation.alphaTarget(0);d.fx=null;d.fy=null;}))
+      .on('end',(e,d)=>{if(!e.active)simulation.alphaTarget(0);d.fx=null;d.fy=null;}))
     .on('mouseenter',onHover).on('mouseleave',onLeave).on('click',onClick);
 
-  // 노드 색: depth 기준 유지 (루트=파랑, 1차=초록, 2차=주황)
+  // 글로우 링
   enter.append('circle').attr('class','node-glow')
-    .attr('r',d=>nodeRadius(d)+10)
-    .attr('fill',d=>DEPTH_COLORS[Math.min(d.depth,3)])
-    .attr('fill-opacity',d=>d.depth===2?0.05:0.08).attr('stroke','none');
+    .attr('r',d=>nodeRadius(d)+(d.depth===0?14:d.isHub?10:6))
+    .attr('fill',d=>nodeGlowColor(d))
+    .attr('fill-opacity',d=>d.depth===0?0.15:d.isHub?0.12:0.06)
+    .attr('stroke','none');
 
+  // 메인 원
   enter.append('circle').attr('class','node-circle')
     .attr('r',d=>nodeRadius(d))
-    .attr('fill',d=>`url(#grad-${Math.min(d.depth,3)})`)
-    .attr('stroke',d=>d.depth===2?'rgba(255,255,255,0.55)':'rgba(255,255,255,0.75)')
-    .attr('stroke-width',d=>d.depth===0?3:d.depth===1?1.8:1.2)
-    .attr('opacity',d=>d.depth===2?0.88:1);
+    .attr('fill',d=>nodeFill(d))
+    .attr('stroke',d=>d.depth===0||d.isHub?'rgba(255,255,255,0.80)':'rgba(255,255,255,0.55)')
+    .attr('stroke-width',d=>d.depth===0?3:d.isHub?2:1.2)
+    .attr('opacity',d=>d.depth===3?0.85:1);
 
-  // 텍스트 줄바꿈 (tspan)
+  // 텍스트
   enter.each(function(d) {
     const r=nodeRadius(d);
-    const maxW=r*1.75;
-    const fs=d.depth===0?13:d.depth===1?11:10;
+    const fs=d.depth===0?13:d.isHub?11:d.depth===1?9:d.depth===2?9:8;
+    const maxW=r*1.8;
     const cpl=Math.max(2,Math.floor(maxW/(fs*0.62)));
     const chars=[...d.label];
     const lines=[];
     for(let i=0;i<chars.length;i+=cpl) lines.push(chars.slice(i,i+cpl).join(''));
     const lh=fs+2;
     const startY=-(lines.length-1)*lh/2;
+    const fillCol=nodeTextColor(d);
+    const strokeCol=d.depth===0||d.isHub?'rgba(0,0,0,0.25)':'rgba(255,255,255,0.90)';
     const txt=d3.select(this).append('text').attr('class','node-label')
-      .attr('text-anchor','middle').attr('fill','#111827')
-      .attr('stroke','rgba(255,255,255,0.92)').attr('stroke-width',3).attr('paint-order','stroke')
-      .attr('font-size',`${fs}px`).attr('font-weight',d.depth===0?'700':'600')
+      .attr('text-anchor','middle').attr('fill',fillCol)
+      .attr('stroke',strokeCol).attr('stroke-width',d.depth===0||d.isHub?0:2.5)
+      .attr('paint-order','stroke')
+      .attr('font-size',`${fs}px`).attr('font-weight',d.depth===0||d.isHub?'700':'600')
       .attr('font-family','-apple-system,BlinkMacSystemFont,system-ui,sans-serif')
       .attr('pointer-events','none');
     lines.forEach((l,i)=>{
@@ -620,10 +612,18 @@ function updateGraph() {
 
   simulation.nodes(nodes);
   simulation.force('link').links(links);
-  // depth에 따라 충돌 반경 차등: depth-1 넉넉히, depth-2 타이트하게
-  simulation.force('collision').radius(d=>nodeRadius(d)+(d.depth===1?16:d.depth===2?8:20));
+  simulation.force('link').distance(d=>{
+    const t=nodes.find(n=>n.id===(d.target?.id||d.target));
+    if(!t) return 40;
+    if(t.isHub) return 32;
+    if(t.depth===1) return 22;
+    if(t.depth===2) return 28;
+    if(t.depth===3) return 24;
+    return 30;
+  });
+  simulation.force('collision').radius(d=>nodeRadius(d)+(d.depth===0?20:d.isHub?14:d.depth===1?10:d.depth===2?9:7));
   simulation.force('center',d3.forceCenter(W/2,H/2));
-  simulation.alpha(0.72).restart();
+  simulation.alpha(0.75).restart();
 
   linksG.selectAll('line')
     .attr('stroke',d=>linkColor(d))
@@ -635,41 +635,39 @@ function updateGraph() {
       .attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
       .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
     nodesG.selectAll('g.node-group').attr('transform',d=>`translate(${d.x},${d.y})`);
-    // 헐 업데이트: 매 4틱마다 (성능 최적화)
     if(tickCount++%4===0) renderHalos();
   });
 }
 
-// ── 클러스터 헐 렌더 ──────────────────────────────────────
+// ── 허브 헐(halo) 렌더 ────────────────────────────────────
 function renderHalos() {
   halosG.selectAll('.ch').data(currentClusters,d=>d.id).join(
     enter=>enter.append('g').attr('class','ch').call(g=>{
       g.append('path').attr('class','ch-fill');
-      // 레이블 배경 rect + 텍스트
-      g.append('rect').attr('class','ch-label-bg').attr('rx',5).attr('ry',5);
+      g.append('rect').attr('class','ch-label-bg').attr('rx',6).attr('ry',6);
       g.append('text').attr('class','ch-label-txt')
         .attr('text-anchor','middle').attr('font-size',11).attr('font-weight',700)
         .attr('fill','#fff').attr('pointer-events','none').attr('dy','0.35em');
     })
   ).each(function(cluster){
-    const ci=currentClusters.indexOf(cluster);
-    const cNodes=nodes.filter(n=>n.clusterIdx===ci&&n.x!=null&&!isNaN(n.x));
-    if(!cNodes.length) return;
+    const hi=cluster.hubIdx;
+    // 해당 허브 + 그 자식 노드들만 포함 (비허브 depth-1 제외)
+    const cNodes=nodes.filter(n=>
+      (n.isHub && n.hubIdx===hi) || (n.hubIdx===hi && n.depth>=2)
+    ).filter(n=>n.x!=null&&!isNaN(n.x));
+    if(cNodes.length<2) return;
     const pts=cNodes.map(n=>[n.x,n.y]);
-    // depth-1 노드가 있으면 넉넉한 padding, depth-2 전용이면 타이트하게
-    const hasD1=cNodes.some(n=>n.depth===1);
-    const repNode=cNodes.find(n=>n.depth===1)||cNodes[0];
-    const pad=nodeRadius(repNode)+( hasD1 ? 24 : 16 );
+    const pad=26;
     d3.select(this).select('.ch-fill')
       .attr('d',hullPath(pts,pad))
-      .attr('fill',cluster.color).attr('fill-opacity',0.09)
+      .attr('fill',cluster.color).attr('fill-opacity',0.08)
       .attr('stroke',cluster.color).attr('stroke-width',1.8)
-      .attr('stroke-opacity',0.38).attr('stroke-dasharray','none');
-    // 레이블: hull 상단 중앙에 색상 배지
+      .attr('stroke-opacity',0.35);
+    // 레이블: hull 상단, 허브 키워드명 표시
     const cx=d3.mean(pts,p=>p[0]);
     const minY=d3.min(pts,p=>p[1])-pad+8;
     const label=cluster.label||'';
-    const tw=label.length*7.5+18; // 텍스트 너비 추정
+    const tw=label.length*7.5+18;
     d3.select(this).select('.ch-label-bg')
       .attr('x',cx-tw/2).attr('y',minY-11)
       .attr('width',tw).attr('height',20)
@@ -707,7 +705,7 @@ function onClick(e,d) {
   infoPanelEl.innerHTML=`
     <div class="info-card-header">
       <span class="info-kw">${d.label}</span>
-      <span class="info-depth">${d.depth}차 연관어</span>
+      <span class="info-depth">${d.depth===0?'검색어':d.isHub?'TOP5 핵심':d.depth+'차 연관어'}</span>
     </div>
     ${d.totalVol ? `
     <div class="card-bars">
@@ -768,68 +766,112 @@ function downloadExcel() {
   showToast('다운로드 완료!');
 }
 
-// ── 스마트 수집 (클러스터 기반, 2 API 배치) ─────────────────
+// ── 스마트 수집 (허브 기반, 3 API 배치) ──────────────────
 async function collectAll(rootKeyword, rootId, prefetchedRoot) {
   const barEl=document.getElementById('progress-bar');
   const progEl=document.getElementById('loading-progress');
   function prog(pct,text){if(barEl)barEl.style.width=pct+'%';if(progEl)progEl.textContent=text;}
 
-  prog(15,'키워드 스코어링 & 클러스터링...');
+  prog(10,'키워드 스코어링...');
 
-  // 연관성 점수 계산 + 상위 MAX_D1개 선택
+  // 점수 계산 후 정렬
   const scored=prefetchedRoot
     .map((item,idx)=>({...item,_score:relevanceScore(item,idx)}))
-    .sort((a,b)=>b._score-a._score)
-    .slice(0,MAX_D1);
+    .sort((a,b)=>b._score-a._score);
 
-  // 클러스터 생성 (루트 키워드 기반 의미 레이블 추출)
-  currentClusters=buildClusters(scored, rootKeyword);
-  prog(30,`${currentClusters.length}개 토픽 클러스터 생성 완료`);
+  // TOP5 → 허브 / 나머지 MAX_D1개 → 기타 1차
+  const hubs    = scored.slice(0, MAX_HUB);
+  const nonHubs = scored.slice(MAX_HUB, MAX_HUB + MAX_D1);
 
-  // depth-1 노드 추가 (클러스터 정보 포함)
-  scored.forEach(item=>{
+  // 허브 클러스터 정보 (halo용)
+  currentClusters = buildHubClusters(hubs);
+  prog(20,`TOP${hubs.length} 허브 선정 완료`);
+
+  // 허브 노드 추가 (depth-1, isHub=true)
+  hubs.forEach((item,i)=>{
     const id=item.keyword.toLowerCase().trim();
     if(!id||nodeIds.has(id)) return;
     nodeIds.add(id);
-    const ci=currentClusters.findIndex(c=>c.items.some(i=>(i.keyword||i.label||'')===(item.keyword||'')));
-    const cluster=currentClusters[Math.max(0,ci)];
-    nodes.push({id,label:item.keyword,depth:1,
+    nodes.push({id,label:item.keyword,depth:1,isHub:true,hubIdx:i,
       totalVol:item.totalVol||0,pcVol:item.pcVol||0,mobileVol:item.mobileVol||0,
       pcClicks:item.pcClicks||0,mobileClicks:item.mobileClicks||0,
-      pcCtr:item.pcCtr||0,mobileCtr:item.mobileCtr||0,
-      compIdx:item.compIdx||'',
-      clusterIdx:Math.max(0,ci),clusterColor:cluster?.color||CLUSTER_COLORS[0],
+      pcCtr:item.pcCtr||0,mobileCtr:item.mobileCtr||0,compIdx:item.compIdx||'',
       _score:item._score});
     links.push({source:rootId,target:id,strength:item._score});
   });
 
-  prog(50,`상위 ${MAX_D2_PARENTS}개 키워드 depth-2 수집 중...`);
+  // 기타 1차 노드 추가 (depth-1, isHub=false)
+  nonHubs.forEach(item=>{
+    const id=item.keyword.toLowerCase().trim();
+    if(!id||nodeIds.has(id)) return;
+    nodeIds.add(id);
+    nodes.push({id,label:item.keyword,depth:1,isHub:false,hubIdx:null,
+      totalVol:item.totalVol||0,pcVol:item.pcVol||0,mobileVol:item.mobileVol||0,
+      pcClicks:item.pcClicks||0,mobileClicks:item.mobileClicks||0,
+      pcCtr:item.pcCtr||0,mobileCtr:item.mobileCtr||0,compIdx:item.compIdx||'',
+      _score:item._score});
+    links.push({source:rootId,target:id,strength:item._score*0.35});
+  });
 
-  // depth-2: 점수 상위 MAX_D2_PARENTS개에 대해서만 1 배치로 병렬 수집
-  const top=nodes.filter(n=>n.depth===1).sort((a,b)=>b._score-a._score).slice(0,MAX_D2_PARENTS);
-  const results=await Promise.allSettled(top.map(n=>fetchNaverKeywords(n.label)));
+  prog(30,`depth-2 수집 중 (허브 ${hubs.length}개 병렬)...`);
 
-  results.forEach((r,i)=>{
-    prog(50+((i+1)/top.length)*45,`depth-2 (${i+1}/${top.length}) 처리 중...`);
+  // Batch 2: 허브당 depth-2 병렬 수집
+  const hubNodes=nodes.filter(n=>n.isHub);
+  const d2Results=await Promise.allSettled(hubNodes.map(n=>fetchNaverKeywords(n.label)));
+
+  const d3Parents=[];  // batch 3용 (허브당 최상위 depth-2 노드 1개)
+
+  d2Results.forEach((r,i)=>{
+    prog(30+((i+1)/hubNodes.length)*30,`depth-2 (${i+1}/${hubNodes.length}) 완료`);
     if(r.status!=='fulfilled') return;
-    const parent=top[i];
-    r.value.slice(0,MAX_D2_PER).forEach((item,idx)=>{
+    const hubNode=hubNodes[i];
+    let added=0;
+    r.value.slice(0,MAX_D2_PER*3).forEach((item,idx)=>{
+      if(added>=MAX_D2_PER) return;
       const id=item.keyword.toLowerCase().trim();
       if(!id||nodeIds.has(id)) return;
       nodeIds.add(id);
+      added++;
       const sc=relevanceScore(item,idx)*0.5;
-      nodes.push({id,label:item.keyword,depth:2,
+      const d2n={id,label:item.keyword,depth:2,isHub:false,hubIdx:hubNode.hubIdx,
         totalVol:item.totalVol||0,pcVol:item.pcVol||0,mobileVol:item.mobileVol||0,
         pcClicks:item.pcClicks||0,mobileClicks:item.mobileClicks||0,
-        pcCtr:item.pcCtr||0,mobileCtr:item.mobileCtr||0,
-        compIdx:item.compIdx||'',
-        clusterIdx:parent.clusterIdx,clusterColor:parent.clusterColor,
-        _score:sc});
-      links.push({source:parent.id,target:id,strength:sc});
+        pcCtr:item.pcCtr||0,mobileCtr:item.mobileCtr||0,compIdx:item.compIdx||'',
+        _score:sc};
+      nodes.push(d2n);
+      links.push({source:hubNode.id,target:id,strength:sc});
+      if(added===1) d3Parents.push(d2n);  // 허브당 top-1 depth-2 → batch3 대상
     });
   });
 
-  prog(100,`${nodes.length}개 키워드 · ${currentClusters.length}개 클러스터`);
+  prog(60,`depth-3 수집 중 (${d3Parents.length}개 병렬)...`);
+
+  // Batch 3: 허브당 최상위 depth-2에서 depth-3 수집
+  if(d3Parents.length>0) {
+    const d3Results=await Promise.allSettled(d3Parents.map(n=>fetchNaverKeywords(n.label)));
+    d3Results.forEach((r,i)=>{
+      prog(60+((i+1)/d3Parents.length)*35,`depth-3 (${i+1}/${d3Parents.length}) 완료`);
+      if(r.status!=='fulfilled') return;
+      const parentNode=d3Parents[i];
+      let added=0;
+      r.value.slice(0,MAX_D3_PER*3).forEach((item,idx)=>{
+        if(added>=MAX_D3_PER) return;
+        const id=item.keyword.toLowerCase().trim();
+        if(!id||nodeIds.has(id)) return;
+        nodeIds.add(id);
+        added++;
+        const sc=relevanceScore(item,idx)*0.25;
+        nodes.push({id,label:item.keyword,depth:3,isHub:false,hubIdx:parentNode.hubIdx,
+          totalVol:item.totalVol||0,pcVol:item.pcVol||0,mobileVol:item.mobileVol||0,
+          pcClicks:item.pcClicks||0,mobileClicks:item.mobileClicks||0,
+          pcCtr:item.pcCtr||0,mobileCtr:item.mobileCtr||0,compIdx:item.compIdx||'',
+          _score:sc});
+        links.push({source:parentNode.id,target:id,strength:sc});
+      });
+    });
+  }
+
+  prog(100,`총 ${nodes.length}개 키워드 (허브 ${hubNodes.length}개)`);
 }
 
 // ── UI 유틸 ───────────────────────────────────────────
@@ -859,11 +901,22 @@ function setLoading(active,text='연관 검색어 수집 중...') {
 }
 
 function updateLegend(keyword) {
-  const items=[keyword||'검색어','1차 연관','2차 연관','3차 연관'];
+  const items=[
+    {label:keyword||'검색어', color:ROOT_COLOR},
+    {label:'TOP5 핵심 키워드', color:HUB_COLORS[0], multi:true},
+    {label:'기타 1차 연관', color:NON_HUB_COLOR},
+    {label:'2차 연관', color:'#94a3b8', note:'허브 색 계열'},
+    {label:'3차 연관', color:D3_COLOR},
+  ];
   const wrap=document.getElementById('mm-legend');
-  wrap.innerHTML=items.map((t,i)=>
-    `<div class="mm-legend-item"><div class="mm-dot" style="background:${DEPTH_COLORS[i]}"></div>${t}</div>`
-  ).join('');
+  wrap.innerHTML=items.map(item=>{
+    if(item.multi){
+      // 5개 허브 색을 작게 표시
+      const dots=HUB_COLORS.map(c=>`<div class="mm-dot" style="background:${c};width:8px;height:8px"></div>`).join('');
+      return `<div class="mm-legend-item">${dots}<span style="margin-left:4px">${item.label}</span></div>`;
+    }
+    return `<div class="mm-legend-item"><div class="mm-dot" style="background:${item.color}"></div>${item.label}</div>`;
+  }).join('');
 }
 
 // ── 히어로 → 결과 전환 ────────────────────────────────
