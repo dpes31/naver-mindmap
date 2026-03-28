@@ -7,7 +7,7 @@ const MAX_DEPTH      = 2;
 const MAX_D1         = 25;  // depth-1 최대
 const MAX_D2_PARENTS = 5;   // depth-2 확장할 depth-1 수 (API 1배치)
 const MAX_D2_PER     = 4;   // depth-2 부모당 최대
-const MAX_LINKS_SHOW = 28;  // 표시 링크 최대
+const MAX_LINKS_SHOW = 40;  // 표시 링크 최대
 let currentClusters  = [];
 let currentKeyword   = '';
 
@@ -521,27 +521,48 @@ function updateGraph() {
   const el=document.getElementById('graph');
   const W=el.clientWidth||800, H=el.clientHeight||600;
 
-  const innerR = Math.min(W,H)*0.27;
+  const innerR = Math.min(W,H)*0.28;
   const outerR = Math.min(W,H)*0.46;
   const clCount = currentClusters.length||1;
-  // 클러스터 섹터 각도 배열
+  // 클러스터 섹터 중심 각도
   const clAngles = currentClusters.map((_,ci)=>(ci/clCount)*2*Math.PI - Math.PI/2);
-  // 노드별 목표 좌표 함수
+
+  // 클러스터 내 노드를 깊이별로 분류 → 부채꼴 분산용 인덱스 계산
+  const clMemberMap = {};
+  nodes.forEach(n=>{
+    if(n.depth===0||n.clusterIdx==null) return;
+    const key=`${n.clusterIdx}-${n.depth}`;
+    if(!clMemberMap[key]) clMemberMap[key]=[];
+    clMemberMap[key].push(n.id);
+  });
+  // 클러스터 내 같은 depth 노드들을 부채꼴로 펼치는 각도 오프셋
+  function nodeAngleOffset(n) {
+    const key=`${n.clusterIdx}-${n.depth}`;
+    const members=clMemberMap[key]||[];
+    const idx=members.indexOf(n.id);
+    const count=members.length;
+    if(count<=1) return 0;
+    // depth-1: ±35°, depth-2: ±25° 범위로 분산
+    const spread=n.depth===1?(Math.PI/180*35):(Math.PI/180*25);
+    return (idx/(count-1)-0.5)*2*spread;
+  }
+
+  // 노드별 목표 좌표 함수 (클러스터 중심 + 부채꼴 오프셋)
   function targetX(n) {
     if(n.depth===0||n.clusterIdx==null) return W/2;
-    const angle=clAngles[n.clusterIdx]||0;
+    const angle=(clAngles[n.clusterIdx]||0)+nodeAngleOffset(n);
     return W/2+Math.cos(angle)*(n.depth===1?innerR:outerR);
   }
   function targetY(n) {
     if(n.depth===0||n.clusterIdx==null) return H/2;
-    const angle=clAngles[n.clusterIdx]||0;
+    const angle=(clAngles[n.clusterIdx]||0)+nodeAngleOffset(n);
     return H/2+Math.sin(angle)*(n.depth===1?innerR:outerR);
   }
   // forceX/Y로 섹터 고정 (alpha 독립적으로 강하게 유지)
   simulation
-    .force('clusterX', d3.forceX(targetX).strength(n=>n.depth===0?0:0.82))
-    .force('clusterY', d3.forceY(targetY).strength(n=>n.depth===0?0:0.82))
-    .force('radial',null); // forceX/Y와 중복 제거
+    .force('clusterX', d3.forceX(targetX).strength(n=>n.depth===0?0:0.78))
+    .force('clusterY', d3.forceY(targetY).strength(n=>n.depth===0?0:0.78))
+    .force('radial',null);
 
   // 강도 상위 MAX_LINKS_SHOW개만 표시
   const shownLinks=[...links].sort((a,b)=>(b.strength||0)-(a.strength||0)).slice(0,MAX_LINKS_SHOW);
@@ -559,17 +580,18 @@ function updateGraph() {
       .on('end',  (e,d)=>{if(!e.active)simulation.alphaTarget(0);d.fx=null;d.fy=null;}))
     .on('mouseenter',onHover).on('mouseleave',onLeave).on('click',onClick);
 
-  // 노드 색: depth 기준 유지 (1차=초록, 2차=주황, 루트=파랑)
+  // 노드 색: depth 기준 유지 (루트=파랑, 1차=초록, 2차=주황)
   enter.append('circle').attr('class','node-glow')
     .attr('r',d=>nodeRadius(d)+10)
     .attr('fill',d=>DEPTH_COLORS[Math.min(d.depth,3)])
-    .attr('fill-opacity',0.08).attr('stroke','none');
+    .attr('fill-opacity',d=>d.depth===2?0.05:0.08).attr('stroke','none');
 
   enter.append('circle').attr('class','node-circle')
     .attr('r',d=>nodeRadius(d))
     .attr('fill',d=>`url(#grad-${Math.min(d.depth,3)})`)
-    .attr('stroke','rgba(255,255,255,0.75)')
-    .attr('stroke-width',d=>d.depth===0?3:1.5);
+    .attr('stroke',d=>d.depth===2?'rgba(255,255,255,0.55)':'rgba(255,255,255,0.75)')
+    .attr('stroke-width',d=>d.depth===0?3:d.depth===1?1.8:1.2)
+    .attr('opacity',d=>d.depth===2?0.88:1);
 
   // 텍스트 줄바꿈 (tspan)
   enter.each(function(d) {
@@ -598,9 +620,10 @@ function updateGraph() {
 
   simulation.nodes(nodes);
   simulation.force('link').links(links);
-  simulation.force('collision').radius(d=>nodeRadius(d)+12);
+  // depth에 따라 충돌 반경 차등: depth-1 넉넉히, depth-2 타이트하게
+  simulation.force('collision').radius(d=>nodeRadius(d)+(d.depth===1?16:d.depth===2?8:20));
   simulation.force('center',d3.forceCenter(W/2,H/2));
-  simulation.alpha(0.7).restart();
+  simulation.alpha(0.72).restart();
 
   linksG.selectAll('line')
     .attr('stroke',d=>linkColor(d))
@@ -633,17 +656,20 @@ function renderHalos() {
     const cNodes=nodes.filter(n=>n.clusterIdx===ci&&n.x!=null&&!isNaN(n.x));
     if(!cNodes.length) return;
     const pts=cNodes.map(n=>[n.x,n.y]);
-    const pad=nodeRadius(cNodes[0]||nodes[0])+22;
+    // depth-1 노드가 있으면 넉넉한 padding, depth-2 전용이면 타이트하게
+    const hasD1=cNodes.some(n=>n.depth===1);
+    const repNode=cNodes.find(n=>n.depth===1)||cNodes[0];
+    const pad=nodeRadius(repNode)+( hasD1 ? 24 : 16 );
     d3.select(this).select('.ch-fill')
       .attr('d',hullPath(pts,pad))
-      .attr('fill',cluster.color).attr('fill-opacity',0.10)
-      .attr('stroke',cluster.color).attr('stroke-width',2)
-      .attr('stroke-opacity',0.40);
+      .attr('fill',cluster.color).attr('fill-opacity',0.09)
+      .attr('stroke',cluster.color).attr('stroke-width',1.8)
+      .attr('stroke-opacity',0.38).attr('stroke-dasharray','none');
     // 레이블: hull 상단 중앙에 색상 배지
     const cx=d3.mean(pts,p=>p[0]);
     const minY=d3.min(pts,p=>p[1])-pad+8;
     const label=cluster.label||'';
-    const tw=label.length*7+16; // 텍스트 너비 추정
+    const tw=label.length*7.5+18; // 텍스트 너비 추정
     d3.select(this).select('.ch-label-bg')
       .attr('x',cx-tw/2).attr('y',minY-11)
       .attr('width',tw).attr('height',20)
