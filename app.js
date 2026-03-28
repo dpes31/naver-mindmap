@@ -142,94 +142,150 @@ function renderStats(keyword, items) {
   });
 }
 
+// ── DataLab 상대지수 → 절대값 변환 ──────────────────
+function scaleTrend(trend, pcAbs, moAbs) {
+  if (!trend?.length) return trend;
+  const avg3 = (arr,k) => { const s=arr.slice(-3); return s.reduce((a,d)=>a+d[k],0)/(s.length||1); };
+  const pcRef = avg3(trend,'pc')||1, moRef = avg3(trend,'mo')||1;
+  return trend.map(d=>({
+    period:d.period,
+    pc: pcAbs>0 ? Math.round(d.pc/pcRef*pcAbs) : Math.round(d.pc),
+    mo: moAbs>0 ? Math.round(d.mo/moRef*moAbs) : Math.round(d.mo),
+  }));
+}
+let currentTrendData=null;
+function copyTrendData() {
+  if (!currentTrendData?.length){showToast('복사할 데이터가 없습니다');return;}
+  const hdr='\t'+currentTrendData.map(d=>d.period).join('\t');
+  const pc='PC\t'+currentTrendData.map(d=>d.pc).join('\t');
+  const mo='MO\t'+currentTrendData.map(d=>d.mo).join('\t');
+  navigator.clipboard.writeText([hdr,pc,mo].join('\n'))
+    .then(()=>showToast('복사 완료 — Excel에 붙여넣기 하세요'))
+    .catch(()=>showToast('복사 실패 — 브라우저 권한 확인'));
+}
+
 // ── 추이 라인차트 (D3) ────────────────────────────────
-function renderTrendChart(trendData) {
+function renderTrendChart(trendData, pcAbsNow, moAbsNow) {
   const container = document.getElementById('trend-chart');
+  const legendEl  = document.getElementById('trend-legend');
   container.innerHTML = '';
+  if (legendEl) legendEl.innerHTML = '';
 
   if (!trendData || trendData.length === 0) {
-    container.outerHTML = '<div class="trend-placeholder">DataLab API 데이터 없음<span style="font-size:11px;display:block;margin-top:4px">Vercel 환경변수: NAVER_DATALAB_CLIENT_ID / SECRET 확인</span></div>';
+    container.innerHTML = '<div class="trend-placeholder">DataLab API 데이터 없음<span style="font-size:11px;display:block;margin-top:4px">Vercel 환경변수: NAVER_DATALAB_CLIENT_ID / SECRET 확인</span></div>';
     return;
   }
 
-  const margin = {top:10, right:20, bottom:36, left:36};
-  const W = container.clientWidth || 400;
-  const H = 220;
-  const w = W - margin.left - margin.right;
-  const h = H - margin.top - margin.bottom;
+  const data = scaleTrend(trendData, pcAbsNow||0, moAbsNow||0);
+  currentTrendData = data;
 
-  const svg = d3.select(container)
-    .append('svg').attr('width', W).attr('height', H)
-    .append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+  if (legendEl) legendEl.innerHTML =
+    `<div class="tl-item"><div class="tl-dot" style="background:#1a56db"></div>PC Desktop</div>
+     <div class="tl-item"><div class="tl-dot" style="background:#16a34a"></div>Mobile</div>`;
 
-  const x = d3.scaleBand().domain(trendData.map(d=>d.period)).range([0,w]).padding(0.1);
-  const y = d3.scaleLinear().domain([0, d3.max(trendData, d=>Math.max(d.pc,d.mo))*1.15]).range([h,0]).nice();
+  const margin={top:12,right:16,bottom:36,left:58};
+  const W=container.clientWidth||420, H=230;
+  const w=W-margin.left-margin.right, h=H-margin.top-margin.bottom;
 
-  // 격자선
+  const svg=d3.select(container).append('svg')
+    .attr('width','100%').attr('height',H).attr('viewBox',`0 0 ${W} ${H}`)
+    .append('g').attr('transform',`translate(${margin.left},${margin.top})`);
+
+  const x=d3.scaleBand().domain(data.map(d=>d.period)).range([0,w]).padding(0.1);
+  const yMax=d3.max(data,d=>Math.max(d.pc,d.mo))*1.18||100;
+  const y=d3.scaleLinear().domain([0,yMax]).range([h,0]).nice();
+  const xPos=d=>x(d.period)+x.bandwidth()/2;
+
   svg.append('g').attr('class','grid').call(
-    d3.axisLeft(y).tickSize(-w).tickFormat('').ticks(4)
+    d3.axisLeft(y).tickSize(-w).tickFormat('').ticks(5)
   ).selectAll('line').attr('stroke','#e5e7eb').attr('stroke-dasharray','3,3');
   svg.select('.grid .domain').remove();
 
-  // X축
-  svg.append('g').attr('transform',`translate(0,${h})`).call(
-    d3.axisBottom(x).tickFormat(d=>d.slice(2)) // YY-MM
-  ).selectAll('text').attr('font-size',10).attr('fill','#6b7280');
-  // Y축
-  svg.append('g').call(d3.axisLeft(y).ticks(4).tickFormat(d=>d)).selectAll('text').attr('font-size',10).attr('fill','#6b7280');
-  svg.select('.domain').attr('stroke','#e5e7eb');
+  const xAx=svg.append('g').attr('transform',`translate(0,${h})`).call(d3.axisBottom(x).tickFormat(d=>d.slice(2)));
+  xAx.selectAll('text').attr('font-size',10).attr('fill','#6b7280');
+  xAx.select('.domain').attr('stroke','#e5e7eb');
 
-  const xPos = d => x(d.period) + x.bandwidth()/2;
+  const yFmt=v=>v>=10000?(v/10000).toFixed(1)+'만':v>=1000?(v/1000).toFixed(0)+'천':v;
+  const yAx=svg.append('g').call(d3.axisLeft(y).ticks(5).tickFormat(yFmt));
+  yAx.selectAll('text').attr('font-size',10).attr('fill','#6b7280');
+  yAx.select('.domain').attr('stroke','#e5e7eb');
 
-  // MO 라인
-  const lineMo = d3.line().x(xPos).y(d=>y(d.mo)).curve(d3.curveMonotoneX);
-  svg.append('path').datum(trendData).attr('d',lineMo).attr('fill','none')
-    .attr('stroke','#16a34a').attr('stroke-width',2.5);
-  svg.selectAll('.dot-mo').data(trendData).enter().append('circle')
-    .attr('cx',xPos).attr('cy',d=>y(d.mo)).attr('r',3.5)
-    .attr('fill','#16a34a').attr('stroke','#fff').attr('stroke-width',1.5);
-
-  // PC 라인
-  const linePc = d3.line().x(xPos).y(d=>y(d.pc)).curve(d3.curveMonotoneX);
-  svg.append('path').datum(trendData).attr('d',linePc).attr('fill','none')
-    .attr('stroke','#1a56db').attr('stroke-width',2.5);
-  svg.selectAll('.dot-pc').data(trendData).enter().append('circle')
-    .attr('cx',xPos).attr('cy',d=>y(d.pc)).attr('r',3.5)
-    .attr('fill','#1a56db').attr('stroke','#fff').attr('stroke-width',1.5);
-
-  // 범례
-  const leg = svg.append('g').attr('transform',`translate(${w-110},0)`);
-  [['#1a56db','desktop'],['#16a34a','mobile']].forEach(([c,l],i)=>{
-    const g=leg.append('g').attr('transform',`translate(0,${i*18})`);
-    g.append('circle').attr('cx',6).attr('cy',6).attr('r',5).attr('fill',c);
-    g.append('text').attr('x',14).attr('y',10).attr('font-size',11).attr('fill','#6b7280').text(l);
+  [['mo','#16a34a'],['pc','#1a56db']].forEach(([k,c])=>{
+    svg.append('path').datum(data)
+      .attr('d',d3.area().x(xPos).y0(h).y1(d=>y(d[k])).curve(d3.curveMonotoneX))
+      .attr('fill',c).attr('fill-opacity',0.07);
+    svg.append('path').datum(data)
+      .attr('d',d3.line().x(xPos).y(d=>y(d[k])).curve(d3.curveMonotoneX))
+      .attr('fill','none').attr('stroke',c).attr('stroke-width',2.5);
+    svg.selectAll(`.dot-${k}`).data(data).enter().append('circle')
+      .attr('cx',xPos).attr('cy',d=>y(d[k])).attr('r',3.5)
+      .attr('fill',c).attr('stroke','#fff').attr('stroke-width',1.5);
   });
 }
 
-// ── 성별 비율 렌더 ────────────────────────────────────
+// ── 성별/연령 렌더 ────────────────────────────────────
 function renderGenderAge(data) {
   const gs = document.getElementById('gender-section');
   const as = document.getElementById('age-section');
 
   if (data?.gender) {
-    const {male, female} = data.gender;
+    const g = data.gender;
     gs.innerHTML = `
       <div class="ga-title">성별 검색 비율</div>
-      <div class="gender-bar">
-        <div class="gender-segment" style="width:${male}%;background:#1a56db">${male}%</div>
-        <div class="gender-segment" style="width:${female}%;background:#ec4899">${female}%</div>
+      <div class="gender-bar-wrap">
+        <div class="gender-seg male" style="width:${g.male}%">
+          <span class="gender-seg-label">남성 ${g.male}%</span>
+        </div>
+        <div class="gender-seg female" style="width:${g.female}%">
+          <span class="gender-seg-label">여성 ${g.female}%</span>
+        </div>
       </div>
-      <div class="gender-labels">
-        <span class="gender-label">남성 <b>${male}%</b></span>
-        <span class="gender-label">여성 <b>${female}%</b></span>
+      <div class="gender-device-wrap">
+        <div class="gender-device-col">
+          <div class="gender-device-title">PC</div>
+          <div class="gender-device-bar">
+            <div class="gender-device-seg male" style="width:${g.malePc}%"></div>
+            <div class="gender-device-seg female" style="width:${g.femalePc}%"></div>
+          </div>
+          <div class="gender-device-vals">
+            <span class="male-val">남 ${g.malePc}%</span>
+            <span class="female-val">여 ${g.femalePc}%</span>
+          </div>
+        </div>
+        <div class="gender-device-col">
+          <div class="gender-device-title">Mobile</div>
+          <div class="gender-device-bar">
+            <div class="gender-device-seg male" style="width:${g.maleMo}%"></div>
+            <div class="gender-device-seg female" style="width:${g.femaleMo}%"></div>
+          </div>
+          <div class="gender-device-vals">
+            <span class="male-val">남 ${g.maleMo}%</span>
+            <span class="female-val">여 ${g.femaleMo}%</span>
+          </div>
+        </div>
       </div>`;
   } else {
     gs.innerHTML = `<div class="ga-title">성별 검색 비율</div>
       <div class="ga-placeholder">Vercel에 NAVER_DATALAB_CLIENT_ID / SECRET 입력 후 표시됩니다</div>`;
   }
 
-  as.innerHTML = `<div class="ga-title">연령별 검색 비율</div>
-    <div class="ga-placeholder">DataLab 연령별 API 추가 연동 예정</div>`;
+  if (data?.ages) {
+    const entries = Object.entries(data.ages);
+    const maxPct = Math.max(...entries.map(([,v])=>v), 1);
+    as.innerHTML = `
+      <div class="ga-title">연령별 검색 비율</div>
+      <div class="age-bars">
+        ${entries.map(([label,pct])=>`
+          <div class="age-row">
+            <div class="age-label">${label}</div>
+            <div class="age-track"><div class="age-fill" style="width:${Math.round(pct/maxPct*100)}%"></div></div>
+            <div class="age-val">${pct}%</div>
+          </div>`).join('')}
+      </div>`;
+  } else {
+    as.innerHTML = `<div class="ga-title">연령별 검색 비율</div>
+      <div class="ga-placeholder">Vercel에 NAVER_DATALAB_CLIENT_ID / SECRET 입력 후 표시됩니다</div>`;
+  }
 }
 
 // ── 노드 반경 ─────────────────────────────────────────
@@ -252,13 +308,14 @@ function linkWidth(d) {
   return 1+Math.log1p(t.totalVol)/Math.log1p(maxV)*5;
 }
 
+function hexToRgba(hex, a) {
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
 function linkColor(d) {
   const t=nodes.find(n=>n.id===(d.target?.id||d.target));
-  if (!t?.totalVol) return 'rgba(160,174,192,0.3)';
-  const same=nodes.filter(n=>n.depth===t.depth&&n.totalVol>0);
-  const maxV=Math.max(...same.map(n=>n.totalVol),1);
-  const sc=Math.log1p(t.totalVol)/Math.log1p(maxV);
-  return `rgba(99,102,241,${(0.15+sc*0.5).toFixed(2)})`;
+  if (!t) return 'rgba(160,174,192,0.25)';
+  return hexToRgba(DEPTH_COLORS[Math.min(t.depth,3)], 0.45);
 }
 
 // ── D3 초기화 ─────────────────────────────────────────
@@ -289,11 +346,11 @@ const linksG=zoomG.append('g').attr('id','links');
 const nodesG=zoomG.append('g').attr('id','nodes');
 
 const simulation=d3.forceSimulation()
-  .force('link',d3.forceLink().id(d=>d.id).distance(d=>100+(d.target.depth||0)*55).strength(0.55))
-  .force('charge',d3.forceManyBody().strength(-380).distanceMax(600))
+  .force('link',d3.forceLink().id(d=>d.id).distance(d=>80+(d.target?.depth||0)*60).strength(0.5))
+  .force('charge',d3.forceManyBody().strength(-350).distanceMax(600))
   .force('center',d3.forceCenter(400,300))
   .force('collision',d3.forceCollide().radius(d=>nodeRadius(d)+14))
-  .alphaDecay(0.025);
+  .alphaDecay(0.028);
 
 let nodes=[],links=[];
 const nodeIds=new Set();
@@ -303,6 +360,10 @@ let isLoading=false;
 function updateGraph() {
   const el=document.getElementById('graph');
   const W=el.clientWidth||800, H=el.clientHeight||600;
+
+  simulation.force('radial', d3.forceRadial(
+    d => d.depth===0 ? 0 : d.depth*150, W/2, H/2
+  ).strength(d => d.depth===0 ? 1 : 0.38));
 
   const link=linksG.selectAll('line').data(links,d=>`${d.source?.id||d.source}→${d.target?.id||d.target}`);
   link.enter().append('line').attr('stroke-linecap','round');
@@ -409,15 +470,40 @@ svg.on('click',()=>infoPanelEl.classList.remove('visible'));
 window.reSearch=kw=>{document.getElementById('searchInput').value=kw;startSearch(kw);};
 
 // ── BFS 전수 수집 ─────────────────────────────────────
-async function collectAll(rootKeyword, rootId) {
-  const queue=[{kw:rootKeyword,parentId:rootId,depth:1}];
-  let processed=0;
+async function collectAll(rootKeyword, rootId, prefetchedRoot) {
+  const ESTIMATED = 41; // ~1+8+32
+  let processed = 0;
+  const barEl = document.getElementById('progress-bar');
+  const progEl = document.getElementById('loading-progress');
+  function tick(n=1) {
+    processed += n;
+    const pct = Math.min(99, Math.round(processed/ESTIMATED*100));
+    if (barEl) barEl.style.width = pct+'%';
+    if (progEl) progEl.textContent = `${processed} / ~${ESTIMATED} 수집 중... ${pct}%`;
+  }
+
+  const queue = [];
+  if (prefetchedRoot?.length) {
+    tick(1);
+    prefetchedRoot.slice(0, BRANCH_LIMITS[1]).forEach(item=>{
+      const id=item.keyword.toLowerCase().trim();
+      if(!id||nodeIds.has(id)) return;
+      nodeIds.add(id);
+      nodes.push({id,label:item.keyword,depth:1,
+        totalVol:item.totalVol||0,pcVol:item.pcVol||0,mobileVol:item.mobileVol||0,
+        pcClicks:item.pcClicks||0,mobileClicks:item.mobileClicks||0,pcCtr:item.pcCtr||0,mobileCtr:item.mobileCtr||0});
+      links.push({source:rootId,target:id});
+      if(1<MAX_DEPTH) queue.push({kw:item.keyword,parentId:id,depth:2});
+    });
+  } else {
+    queue.push({kw:rootKeyword,parentId:rootId,depth:1});
+  }
+
   while(queue.length>0&&nodes.length<300) {
     const batch=queue.splice(0,5);
     const results=await Promise.allSettled(batch.map(it=>fetchNaverKeywords(it.kw)));
     results.forEach((r,i)=>{
-      processed++;
-      document.getElementById('loading-progress').textContent=`${processed}개 수집 완료`;
+      tick(1);
       if(r.status!=='fulfilled') return;
       const {parentId,depth}=batch[i];
       r.value.slice(0,BRANCH_LIMITS[depth]??2).forEach(item=>{
@@ -431,13 +517,14 @@ async function collectAll(rootKeyword, rootId) {
         nodeIds.add(id);
         nodes.push({id,label:item.keyword,depth,
           totalVol:item.totalVol||0,pcVol:item.pcVol||0,mobileVol:item.mobileVol||0,
-          pcClicks:item.pcClicks||0,mobileClicks:item.mobileClicks||0,
-          pcCtr:item.pcCtr||0,mobileCtr:item.mobileCtr||0});
+          pcClicks:item.pcClicks||0,mobileClicks:item.mobileClicks||0,pcCtr:item.pcCtr||0,mobileCtr:item.mobileCtr||0});
         links.push({source:parentId,target:id});
         if(depth<MAX_DEPTH) queue.push({kw:item.keyword,parentId:id,depth:depth+1});
       });
     });
   }
+  if(barEl) barEl.style.width='100%';
+  if(progEl) progEl.textContent=`수집 완료! ${nodes.length}개 키워드`;
 }
 
 // ── UI 유틸 ───────────────────────────────────────────
@@ -457,7 +544,11 @@ function setLoading(active,text='연관 검색어 수집 중...') {
   loadingText.textContent=text;
   loadingEl.classList.toggle('active',active);
   document.getElementById('searchBtn').disabled=active;
-  if(!active) document.getElementById('loading-progress').textContent='';
+  if(!active) {
+    document.getElementById('loading-progress').textContent='';
+    const b=document.getElementById('progress-bar');
+    if(b) b.style.width='0%';
+  }
 }
 
 function updateLegend(keyword) {
@@ -493,28 +584,38 @@ async function startSearch(keyword) {
     fx:W/2,fy:H/2});
 
   try {
-    // 병렬: 1차 키워드 + DataLab 추이
-    const [firstLevel, trendData] = await Promise.all([
+    const [firstLevel, trendResult] = await Promise.all([
       fetchNaverKeywords(keyword),
       fetchTrend(keyword),
     ]);
 
-    if(firstLevel.length>0) renderStats(keyword, firstLevel);
-    renderTrendChart(trendData?.trend || null);
-    renderGenderAge(trendData);
+    // root 노드 stats 업데이트
+    const rootStats = firstLevel.find(d=>d.keyword.toLowerCase()===rootId) || firstLevel[0] || {};
+    const rn=nodes.find(n=>n.id===rootId);
+    if(rn) Object.assign(rn,{totalVol:rootStats.totalVol||0,pcVol:rootStats.pcVol||0,mobileVol:rootStats.mobileVol||0});
 
-    await collectAll(keyword,rootId);
-  } catch(e) {
-    showToast('오류가 발생했습니다. 다시 시도해주세요.');
-  } finally {
+    // 전수 BFS 수집 (firstLevel 재활용으로 중복 API 호출 방지)
+    await collectAll(keyword, rootId, firstLevel);
+
+    // 100% 완료 후 한번에 렌더
     setLoading(false);
-    if(nodes.length<=1) {
-      showToast('연관 검색어를 찾지 못했습니다. 다른 키워드를 시도해보세요.');
-    } else {
+    const pcAbs = rootStats.pcVol || 0;
+    const moAbs = rootStats.mobileVol || 0;
+    renderStats(keyword, firstLevel);
+    renderTrendChart(trendResult?.trend || null, pcAbs, moAbs);
+    renderGenderAge(trendResult);
+
+    if(nodes.length>1) {
       updateGraph();
       showToast(`총 ${nodes.length}개 키워드 로드 완료`);
-      document.querySelector('.mindmap-outer').scrollIntoView({behavior:'smooth'});
+    } else {
+      emptyState.classList.remove('hidden');
+      showToast('연관 검색어를 찾지 못했습니다. 다른 키워드를 시도해보세요.');
     }
+  } catch(e) {
+    console.error(e);
+    showToast('오류가 발생했습니다. 다시 시도해주세요.');
+    setLoading(false);
   }
 }
 
@@ -526,6 +627,8 @@ document.getElementById('searchBtn').addEventListener('click',()=>{
 document.getElementById('searchInput').addEventListener('keydown',e=>{
   if(e.key==='Enter'){const kw=e.target.value.trim();if(kw)startSearch(kw);}
 });
+const copyTrendBtn=document.getElementById('copy-trend-btn');
+if(copyTrendBtn) copyTrendBtn.addEventListener('click',copyTrendData);
 window.addEventListener('resize',()=>{
   const el=document.getElementById('graph');
   simulation.force('center',d3.forceCenter(el.clientWidth/2,el.clientHeight/2)).alpha(0.1).restart();

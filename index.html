@@ -18,6 +18,7 @@
 </header>
 
 <main>
+<div class="page-wrap">
 
   <!-- ── 월간 검색량 섹션 ── -->
   <section class="stats-section">
@@ -34,9 +35,13 @@
     <div class="stats-body">
       <!-- 좌: 추이 차트 -->
       <div class="trend-panel">
-        <div class="trend-panel-title">키워드 : <span id="trend-panel-kw"></span></div>
-        <div class="trend-panel-sub">월별 검색수 추이 (최근 1년)</div>
-        <svg id="trend-chart"></svg>
+        <div class="trend-panel-title">
+          키워드 : <span id="trend-panel-kw"></span>
+          <button id="copy-trend-btn" class="copy-btn" title="월별 데이터 Excel 복사">📋 복사</button>
+        </div>
+        <div class="trend-panel-sub">월별 검색수 추이 (최근 1년) · 절대값 기준</div>
+        <div class="trend-legend-row" id="trend-legend"></div>
+        <div id="trend-chart"></div>
       </div>
 
       <!-- 우: 키워드 카드 5개 -->
@@ -58,11 +63,11 @@
     </div>
   </div>
 
-  <!-- ── 마인드맵 섹션 (좌우 여백 = 스크롤 영역) ── -->
+</div><!-- /.page-wrap -->
+
+  <!-- ── 마인드맵 섹션 ── -->
   <section class="mindmap-outer">
-    <div class="mindmap-margin">
-      <span class="margin-label">scroll</span>
-    </div>
+    <div class="mindmap-margin"></div>
 
     <div class="mindmap-content">
       <div class="mindmap-header">
@@ -84,9 +89,7 @@
       </div>
     </div>
 
-    <div class="mindmap-margin">
-      <span class="margin-label">scroll</span>
-    </div>
+    <div class="mindmap-margin"></div>
   </section>
 
 </main>
@@ -94,6 +97,7 @@
 <div id="loading">
   <div class="spinner"></div>
   <p id="loading-text">연관 검색어 수집 중...</p>
+  <div class="progress-wrap"><div id="progress-bar"></div></div>
   <p id="loading-progress"></p>
 </div>
 <div id="toast"></div>
