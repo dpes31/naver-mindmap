@@ -182,7 +182,7 @@ function renderTrendChart(trendData, pcAbsNow, moAbsNow) {
      <div class="tl-item"><div class="tl-dot" style="background:#16a34a"></div>Mobile</div>`;
 
   const margin={top:12,right:16,bottom:36,left:58};
-  const W=container.clientWidth||420, H=230;
+  const W=container.clientWidth||420, H=Math.max(200, container.clientHeight||230);
   const w=W-margin.left-margin.right, h=H-margin.top-margin.bottom;
 
   const svg=d3.select(container).append('svg')
@@ -376,7 +376,8 @@ const simulation=d3.forceSimulation()
   .force('charge',d3.forceManyBody().strength(-350).distanceMax(600))
   .force('center',d3.forceCenter(400,300))
   .force('collision',d3.forceCollide().radius(d=>nodeRadius(d)+14))
-  .alphaDecay(0.028);
+  .alphaDecay(0.015)
+  .velocityDecay(0.25);
 
 let nodes=[],links=[];
 const nodeIds=new Set();
@@ -399,7 +400,7 @@ function updateGraph() {
   const enter=node.enter().append('g').attr('class','node-group')
     .style('opacity',0).style('cursor','pointer')
     .call(d3.drag()
-      .on('start',(e,d)=>{if(!e.active)simulation.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;tooltipEl.classList.remove('visible');})
+      .on('start',(e,d)=>{if(!e.active)simulation.alphaTarget(0.1).restart();d.fx=d.x;d.fy=d.y;tooltipEl.classList.remove('visible');})
       .on('drag', (e,d)=>{d.fx=e.x;d.fy=e.y;
         if(e.sourceEvent){tooltipEl.style.left=(e.sourceEvent.clientX+14)+'px';tooltipEl.style.top=(e.sourceEvent.clientY-8)+'px';}})
       .on('end',  (e,d)=>{if(!e.active)simulation.alphaTarget(0);d.fx=null;d.fy=null;}))
@@ -513,6 +514,7 @@ function onClick(e,d) {
   infoPanelEl.classList.add('visible');
 }
 svg.on('click',()=>infoPanelEl.classList.remove('visible'));
+document.querySelector('.mindmap-content-wrap').addEventListener('mouseleave',()=>infoPanelEl.classList.remove('visible'));
 window.reSearch=kw=>{document.getElementById('searchInput').value=kw;startSearch(kw);};
 
 // ── BFS 전수 수집 ─────────────────────────────────────
