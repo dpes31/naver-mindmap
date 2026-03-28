@@ -1,11 +1,15 @@
 // ── 설정 ──────────────────────────────────────────
-const DEPTH_COLORS  = ['#1a56db', '#22c55e', '#f59e0b', '#8b5cf6'];
-const DEPTH_RADIUS  = [44, 30, 22, 16];
-const DEPTH_OPACITY = [1, 0.92, 0.85, 0.80];
-const MAX_DEPTH     = 3;
-const MAX_NODES     = 500;
-const BRANCH_LIMITS = [Infinity, Infinity, 10, 3]; // depth1: 전체, depth2: 10개/부모, depth3: 3개/부모
-let currentKeyword  = '';
+const DEPTH_COLORS   = ['#1a56db', '#22c55e', '#f59e0b', '#8b5cf6'];
+const CLUSTER_COLORS = ['#3b82f6','#16a34a','#f59e0b','#ec4899','#8b5cf6','#0ea5e9','#f97316'];
+const DEPTH_RADIUS   = [44, 26, 18, 14];
+const DEPTH_OPACITY  = [1, 0.92, 0.85, 0.80];
+const MAX_DEPTH      = 2;
+const MAX_D1         = 25;  // depth-1 최대
+const MAX_D2_PARENTS = 5;   // depth-2 확장할 depth-1 수 (API 1배치)
+const MAX_D2_PER     = 4;   // depth-2 부모당 최대
+const MAX_LINKS_SHOW = 28;  // 표시 링크 최대
+let currentClusters  = [];
+let currentKeyword   = '';
 
 // ── Naver Search Ads API (키워드 + 검색량) ──────────
 
@@ -354,15 +358,74 @@ function hexToRgba(hex, a) {
 function linkColor(d) {
   const t=nodes.find(n=>n.id===(d.target?.id||d.target));
   if (!t) return 'rgba(160,174,192,0.25)';
-  // 연결 강도: 타깃 노드의 검색량에 비례해 opacity 변화 (0.25 ~ 0.70)
-  let alpha = 0.45;
-  if (t.totalVol > 0) {
-    const same = nodes.filter(n=>n.depth===t.depth&&n.totalVol>0);
-    const maxV = Math.max(...same.map(n=>n.totalVol), 1);
-    const ratio = Math.log1p(t.totalVol) / Math.log1p(maxV);
-    alpha = 0.22 + ratio * 0.48; // 0.22 ~ 0.70
+  const col = t.clusterColor || CLUSTER_COLORS[Math.min(t.depth,3)];
+  // 연결 강도 = 링크 strength에 비례 (0.2~0.7)
+  const s = d.strength || 0.3;
+  const alpha = Math.min(0.72, 0.20 + s * 1.8);
+  return hexToRgba(col, alpha);
+}
+
+// ── 연관성 점수 (API 순위 × 검색량) ─────────────────────
+function relevanceScore(item, idx) {
+  const posScore = 1 / (idx + 1);
+  const volScore = Math.log1p(item.totalVol||0) / Math.log1p(500000);
+  return +(posScore * 0.55 + volScore * 0.45).toFixed(4);
+}
+
+// ── 바이그램 클러스터링 ──────────────────────────────────
+function bigrams(str) {
+  const s = new Set();
+  for (let i=0; i<str.length-1; i++) s.add(str.slice(i,i+2));
+  return s;
+}
+function bigramSim(a, b) {
+  const ba=bigrams(a), bb=bigrams(b);
+  const union=new Set([...ba,...bb]).size||1;
+  return [...ba].filter(g=>bb.has(g)).length / union;
+}
+function buildClusters(items) {
+  const MAX_CL=7, MIN_SIM=0.18;
+  const clusters=[];
+  [...items].sort((a,b)=>(b._score||0)-(a._score||0)).forEach(item=>{
+    const kw=item.keyword||item.label||'';
+    let best=null, bestSim=MIN_SIM;
+    clusters.forEach(c=>{
+      const avg=(c.items.reduce((s,ci)=>s+bigramSim(kw,ci.keyword||ci.label||''),0)/c.items.length)||0;
+      if(avg>bestSim){bestSim=avg;best=c;}
+    });
+    if(best&&best.items.length<9){best.items.push(item);}
+    else if(clusters.length<MAX_CL){clusters.push({id:`cl-${clusters.length}`,items:[item],color:CLUSTER_COLORS[clusters.length%CLUSTER_COLORS.length]});}
+    else{let b2=clusters[0],b2s=-1;clusters.forEach(c=>{const a=(c.items.reduce((s,ci)=>s+bigramSim(kw,ci.keyword||ci.label||''),0)/c.items.length)||0;if(a>b2s){b2s=a;b2=c;}});b2.items.push(item);}
+  });
+  clusters.forEach(c=>{
+    c.totalScore=c.items.reduce((s,i)=>s+(i._score||0),0);
+    const rep=[...c.items].sort((a,b)=>(b._score||0)-(a._score||0))[0];
+    c.label=rep?.keyword||rep?.label||'';
+    c.repId=(rep?.keyword||rep?.label||'').toLowerCase().trim();
+  });
+  return clusters.sort((a,b)=>b.totalScore-a.totalScore);
+}
+
+// ── 클러스터 헐(hull) 패스 ───────────────────────────────
+function hullPath(pts, pad) {
+  if(!pts.length) return '';
+  if(pts.length===1){
+    const [px,py]=pts[0];
+    return `M${px-pad},${py} A${pad},${pad} 0 1,0 ${px+pad},${py} A${pad},${pad} 0 1,0 ${px-pad},${py}`;
   }
-  return hexToRgba(DEPTH_COLORS[Math.min(t.depth,3)], alpha);
+  const hull=d3.polygonHull(pts.map(p=>[p[0],p[1]]));
+  if(!hull||hull.length<3){
+    const cx=d3.mean(pts,p=>p[0]),cy=d3.mean(pts,p=>p[1]);
+    const rx=Math.max(pad*1.5,d3.max(pts,p=>Math.abs(p[0]-cx))+pad);
+    const ry=Math.max(pad,d3.max(pts,p=>Math.abs(p[1]-cy))+pad);
+    return `M${cx-rx},${cy} A${rx},${ry} 0 1,0 ${cx+rx},${cy} A${rx},${ry} 0 1,0 ${cx-rx},${cy}`;
+  }
+  const [hcx,hcy]=d3.polygonCentroid(hull);
+  const exp=hull.map(([px,py])=>{
+    const dx=px-hcx, dy=py-hcy, d=Math.hypot(dx,dy)||1;
+    return `${(px+dx/d*pad).toFixed(1)},${(py+dy/d*pad).toFixed(1)}`;
+  });
+  return `M${exp[0]} L${exp.slice(1).join(' L')} Z`;
 }
 
 // ── D3 초기화 ─────────────────────────────────────────
@@ -389,6 +452,7 @@ const zoomG=svg.append('g').attr('id','zoom-layer');
 const zoom=d3.zoom().scaleExtent([0.1,5]).on('zoom',e=>zoomG.attr('transform',e.transform));
 svg.call(zoom).on('dblclick.zoom',null);
 
+const halosG=zoomG.append('g').attr('id','halos');
 const linksG=zoomG.append('g').attr('id','links');
 const nodesG=zoomG.append('g').attr('id','nodes');
 
@@ -423,12 +487,27 @@ function updateGraph() {
   const W=el.clientWidth||800, H=el.clientHeight||600;
 
   const d1count = nodes.filter(n=>n.depth===1).length;
-  const radStep = Math.max(60, Math.min(120, 800/Math.max(d1count,1)));
+  const innerR = Math.min(W,H)*0.26;
+  const outerR = Math.min(W,H)*0.44;
+  const clCount = currentClusters.length||1;
   simulation.force('radial', d3.forceRadial(
-    d => d.depth===0 ? 0 : d.depth*radStep, W/2, H/2
-  ).strength(d => d.depth===0 ? 1 : 0.7));
+    d => d.depth===0 ? 0 : d.depth===1 ? innerR : outerR, W/2, H/2
+  ).strength(d => d.depth===0 ? 1 : 0.55));
+  // 클러스터 각도 유인력: 같은 클러스터끼리 뭉치게
+  simulation.force('clusterAngle', alpha=>{
+    nodes.forEach(n=>{
+      if(n.depth===0||n.clusterIdx==null) return;
+      const angle=(n.clusterIdx/clCount)*2*Math.PI - Math.PI/2;
+      const r=n.depth===1?innerR:outerR;
+      const tx=W/2+Math.cos(angle)*r, ty=H/2+Math.sin(angle)*r;
+      n.vx+=(tx-n.x)*0.20*alpha;
+      n.vy+=(ty-n.y)*0.20*alpha;
+    });
+  });
 
-  const link=linksG.selectAll('line').data(links,d=>`${d.source?.id||d.source}→${d.target?.id||d.target}`);
+  // 강도 상위 MAX_LINKS_SHOW개만 표시
+  const shownLinks=[...links].sort((a,b)=>(b.strength||0)-(a.strength||0)).slice(0,MAX_LINKS_SHOW);
+  const link=linksG.selectAll('line').data(shownLinks,d=>`${d.source?.id||d.source}→${d.target?.id||d.target}`);
   link.enter().append('line').attr('stroke-linecap','round');
   link.exit().remove();
 
@@ -443,12 +522,18 @@ function updateGraph() {
     .on('mouseenter',onHover).on('mouseleave',onLeave).on('click',onClick);
 
   enter.append('circle').attr('class','node-glow')
-    .attr('r',d=>nodeRadius(d)+10).attr('fill',d=>DEPTH_COLORS[Math.min(d.depth,3)])
-    .attr('fill-opacity',0.07).attr('stroke','none');
+    .attr('r',d=>nodeRadius(d)+10)
+    .attr('fill',d=>d.depth===0?DEPTH_COLORS[0]:d.clusterColor||CLUSTER_COLORS[0])
+    .attr('fill-opacity',0.08).attr('stroke','none');
 
   enter.append('circle').attr('class','node-circle')
     .attr('r',d=>nodeRadius(d))
-    .attr('fill',d=>`url(#grad-${Math.min(d.depth,3)})`)
+    .attr('fill',d=>{
+      if(d.depth===0) return `url(#grad-0)`;
+      // 클러스터 색으로 동적 그라디언트 (인라인 fill)
+      const col=d.clusterColor||CLUSTER_COLORS[0];
+      return hexToRgba(col, DEPTH_OPACITY[Math.min(d.depth,3)]);
+    })
     .attr('stroke','rgba(255,255,255,0.7)')
     .attr('stroke-width',d=>d.depth===0?3:1.5);
 
@@ -479,19 +564,50 @@ function updateGraph() {
 
   simulation.nodes(nodes);
   simulation.force('link').links(links);
-  simulation.force('collision').radius(d=>nodeRadius(d)+14);
+  simulation.force('collision').radius(d=>nodeRadius(d)+12);
   simulation.force('center',d3.forceCenter(W/2,H/2));
-  simulation.alpha(0.5).restart();
+  simulation.alpha(0.6).restart();
 
   linksG.selectAll('line')
     .attr('stroke',d=>linkColor(d))
     .attr('stroke-width',d=>linkWidth(d));
 
+  let tickCount=0;
   simulation.on('tick',()=>{
     linksG.selectAll('line')
       .attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
       .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
     nodesG.selectAll('g.node-group').attr('transform',d=>`translate(${d.x},${d.y})`);
+    // 헐 업데이트: 매 4틱마다 (성능 최적화)
+    if(tickCount++%4===0) renderHalos();
+  });
+}
+
+// ── 클러스터 헐 렌더 ──────────────────────────────────────
+function renderHalos() {
+  halosG.selectAll('.ch').data(currentClusters, d=>d.id).join(
+    enter=>enter.append('g').attr('class','ch').call(g=>{
+      g.append('path').attr('class','ch-fill');
+      g.append('text').attr('class','ch-label')
+        .attr('text-anchor','middle').attr('font-size',10).attr('font-weight',700)
+        .attr('pointer-events','none').attr('dy','0.35em');
+    })
+  ).each(function(cluster){
+    const ci=currentClusters.indexOf(cluster);
+    const cNodes=nodes.filter(n=>n.clusterIdx===ci&&n.x!=null&&!isNaN(n.x));
+    if(!cNodes.length) return;
+    const pts=cNodes.map(n=>[n.x,n.y]);
+    d3.select(this).select('.ch-fill')
+      .attr('d',hullPath(pts,nodeRadius(cNodes[0])+20))
+      .attr('fill',cluster.color).attr('fill-opacity',0.07)
+      .attr('stroke',cluster.color).attr('stroke-width',1.5)
+      .attr('stroke-opacity',0.25).attr('stroke-dasharray','6,3');
+    const cx=d3.mean(pts,p=>p[0]), cy=d3.mean(pts,p=>p[1]);
+    const minY=d3.min(pts,p=>p[1]);
+    d3.select(this).select('.ch-label')
+      .attr('x',cx).attr('y',minY-18)
+      .attr('fill',cluster.color).attr('fill-opacity',0.75)
+      .text(cluster.label||'');
   });
 }
 
@@ -583,63 +699,68 @@ function downloadExcel() {
   showToast('다운로드 완료!');
 }
 
-// ── BFS 전수 수집 ─────────────────────────────────────
+// ── 스마트 수집 (클러스터 기반, 2 API 배치) ─────────────────
 async function collectAll(rootKeyword, rootId, prefetchedRoot) {
-  const d1count = prefetchedRoot?.length || 10;
-  const ESTIMATED = 1 + d1count + Math.min(d1count * 5, 80);
-  let processed = 0;
-  const barEl = document.getElementById('progress-bar');
-  const progEl = document.getElementById('loading-progress');
-  function tick(n=1) {
-    processed += n;
-    const pct = Math.min(99, Math.round(processed/ESTIMATED*100));
-    if (barEl) barEl.style.width = pct+'%';
-    if (progEl) progEl.textContent = `${processed} / ~${ESTIMATED} 수집 중... ${pct}%`;
-  }
+  const barEl=document.getElementById('progress-bar');
+  const progEl=document.getElementById('loading-progress');
+  function prog(pct,text){if(barEl)barEl.style.width=pct+'%';if(progEl)progEl.textContent=text;}
 
-  const queue = [];
-  if (prefetchedRoot?.length) {
-    tick(1);
-    prefetchedRoot.slice(0, BRANCH_LIMITS[1]).forEach(item=>{
+  prog(15,'키워드 스코어링 & 클러스터링...');
+
+  // 연관성 점수 계산 + 상위 MAX_D1개 선택
+  const scored=prefetchedRoot
+    .map((item,idx)=>({...item,_score:relevanceScore(item,idx)}))
+    .sort((a,b)=>b._score-a._score)
+    .slice(0,MAX_D1);
+
+  // 클러스터 생성
+  currentClusters=buildClusters(scored);
+  prog(30,`${currentClusters.length}개 토픽 클러스터 생성 완료`);
+
+  // depth-1 노드 추가 (클러스터 정보 포함)
+  scored.forEach(item=>{
+    const id=item.keyword.toLowerCase().trim();
+    if(!id||nodeIds.has(id)) return;
+    nodeIds.add(id);
+    const ci=currentClusters.findIndex(c=>c.items.some(i=>(i.keyword||i.label||'')===(item.keyword||'')));
+    const cluster=currentClusters[Math.max(0,ci)];
+    nodes.push({id,label:item.keyword,depth:1,
+      totalVol:item.totalVol||0,pcVol:item.pcVol||0,mobileVol:item.mobileVol||0,
+      pcClicks:item.pcClicks||0,mobileClicks:item.mobileClicks||0,
+      pcCtr:item.pcCtr||0,mobileCtr:item.mobileCtr||0,
+      compIdx:item.compIdx||'',
+      clusterIdx:Math.max(0,ci),clusterColor:cluster?.color||CLUSTER_COLORS[0],
+      _score:item._score});
+    links.push({source:rootId,target:id,strength:item._score});
+  });
+
+  prog(50,`상위 ${MAX_D2_PARENTS}개 키워드 depth-2 수집 중...`);
+
+  // depth-2: 점수 상위 MAX_D2_PARENTS개에 대해서만 1 배치로 병렬 수집
+  const top=nodes.filter(n=>n.depth===1).sort((a,b)=>b._score-a._score).slice(0,MAX_D2_PARENTS);
+  const results=await Promise.allSettled(top.map(n=>fetchNaverKeywords(n.label)));
+
+  results.forEach((r,i)=>{
+    prog(50+((i+1)/top.length)*45,`depth-2 (${i+1}/${top.length}) 처리 중...`);
+    if(r.status!=='fulfilled') return;
+    const parent=top[i];
+    r.value.slice(0,MAX_D2_PER).forEach((item,idx)=>{
       const id=item.keyword.toLowerCase().trim();
       if(!id||nodeIds.has(id)) return;
       nodeIds.add(id);
-      nodes.push({id,label:item.keyword,depth:1,
+      const sc=relevanceScore(item,idx)*0.5;
+      nodes.push({id,label:item.keyword,depth:2,
         totalVol:item.totalVol||0,pcVol:item.pcVol||0,mobileVol:item.mobileVol||0,
-        pcClicks:item.pcClicks||0,mobileClicks:item.mobileClicks||0,pcCtr:item.pcCtr||0,mobileCtr:item.mobileCtr||0});
-      links.push({source:rootId,target:id});
-      if(1<MAX_DEPTH) queue.push({kw:item.keyword,parentId:id,depth:2});
+        pcClicks:item.pcClicks||0,mobileClicks:item.mobileClicks||0,
+        pcCtr:item.pcCtr||0,mobileCtr:item.mobileCtr||0,
+        compIdx:item.compIdx||'',
+        clusterIdx:parent.clusterIdx,clusterColor:parent.clusterColor,
+        _score:sc});
+      links.push({source:parent.id,target:id,strength:sc});
     });
-  } else {
-    queue.push({kw:rootKeyword,parentId:rootId,depth:1});
-  }
+  });
 
-  while(queue.length>0&&nodes.length<MAX_NODES) {
-    const batch=queue.splice(0,5);
-    const results=await Promise.allSettled(batch.map(it=>fetchNaverKeywords(it.kw)));
-    results.forEach((r,i)=>{
-      tick(1);
-      if(r.status!=='fulfilled') return;
-      const {parentId,depth}=batch[i];
-      r.value.slice(0,BRANCH_LIMITS[depth]??2).forEach(item=>{
-        const id=item.keyword.toLowerCase().trim();
-        if(!id) return;
-        if(nodeIds.has(id)){
-          if(!links.find(l=>(l.source?.id||l.source)===parentId&&(l.target?.id||l.target)===id))
-            links.push({source:parentId,target:id});
-          return;
-        }
-        nodeIds.add(id);
-        nodes.push({id,label:item.keyword,depth,
-          totalVol:item.totalVol||0,pcVol:item.pcVol||0,mobileVol:item.mobileVol||0,
-          pcClicks:item.pcClicks||0,mobileClicks:item.mobileClicks||0,pcCtr:item.pcCtr||0,mobileCtr:item.mobileCtr||0});
-        links.push({source:parentId,target:id});
-        if(depth<MAX_DEPTH) queue.push({kw:item.keyword,parentId:id,depth:depth+1});
-      });
-    });
-  }
-  if(barEl) barEl.style.width='100%';
-  if(progEl) progEl.textContent=`수집 완료! ${nodes.length}개 키워드`;
+  prog(100,`${nodes.length}개 키워드 · ${currentClusters.length}개 클러스터`);
 }
 
 // ── UI 유틸 ───────────────────────────────────────────
@@ -693,8 +814,8 @@ async function startSearch(keyword) {
   currentKeyword=keyword;
 
   // 상태 초기화
-  nodes=[];links=[];nodeIds.clear();
-  linksG.selectAll('*').remove();nodesG.selectAll('*').remove();
+  nodes=[];links=[];nodeIds.clear();currentClusters=[];
+  halosG.selectAll('*').remove();linksG.selectAll('*').remove();nodesG.selectAll('*').remove();
   infoPanelEl.classList.remove('visible');
   emptyState.classList.add('hidden');
   document.getElementById('kw-cards').innerHTML='';
