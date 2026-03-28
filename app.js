@@ -355,14 +355,14 @@ function hexToRgba(hex, a) {
   const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
   return `rgba(${r},${g},${b},${a})`;
 }
+// 링크 색: depth 기준 (노드와 동일 depth 색)
 function linkColor(d) {
   const t=nodes.find(n=>n.id===(d.target?.id||d.target));
-  if (!t) return 'rgba(160,174,192,0.25)';
-  const col = t.clusterColor || CLUSTER_COLORS[Math.min(t.depth,3)];
-  // 연결 강도 = 링크 strength에 비례 (0.2~0.7)
-  const s = d.strength || 0.3;
-  const alpha = Math.min(0.72, 0.20 + s * 1.8);
-  return hexToRgba(col, alpha);
+  if (!t) return 'rgba(160,174,192,0.20)';
+  const col=DEPTH_COLORS[Math.min(t.depth,3)];
+  const s=d.strength||0.3;
+  const alpha=Math.min(0.65, 0.15+s*1.6);
+  return hexToRgba(col,alpha);
 }
 
 // ── 연관성 점수 (API 순위 × 검색량) ─────────────────────
@@ -370,6 +370,42 @@ function relevanceScore(item, idx) {
   const posScore = 1 / (idx + 1);
   const volScore = Math.log1p(item.totalVol||0) / Math.log1p(500000);
   return +(posScore * 0.55 + volScore * 0.45).toFixed(4);
+}
+
+// ── 의미 기반 클러스터 레이블 추출 ──────────────────────────
+// 루트 키워드를 제거한 잉여 토큰의 빈도로 주제어 결정
+function extractClusterLabel(items, rootKw) {
+  const freq={};
+  items.forEach(item=>{
+    const kw=item.keyword||item.label||'';
+    // 루트 키워드 제거 (부분 매치 포함)
+    let residual=kw;
+    for(let len=rootKw.length; len>=2; len--) {
+      const p=rootKw.slice(0,len);
+      if(kw.includes(p)){residual=kw.replace(p,'').trim();break;}
+    }
+    if(residual===kw||!residual) residual=kw;
+    // 2~3글자 토큰 빈도 집계
+    for(let len=2;len<=3;len++) {
+      for(let i=0;i<=residual.length-len;i++) {
+        const tok=residual.slice(i,i+len).trim();
+        if(tok.length===len) freq[tok]=(freq[tok]||0)+1;
+      }
+    }
+  });
+  // 2개 이상 키워드에 등장한 토큰 중 가장 빈출
+  const best=Object.entries(freq)
+    .filter(([,cnt])=>cnt>=Math.min(2,items.length))
+    .sort((a,b)=>b[1]-a[1]);
+  // 3글자 우선, 없으면 2글자
+  const b3=best.find(([t])=>t.length===3);
+  const b2=best.find(([t])=>t.length===2);
+  const label=b3?.[0]||b2?.[0]||'';
+  if(label) return label;
+  // fallback: 가장 높은 점수 키워드의 마지막 2글자
+  const rep=[...items].sort((a,b)=>(b._score||0)-(a._score||0))[0];
+  const repKw=rep?.keyword||rep?.label||'';
+  return repKw.replace(rootKw,'').trim().slice(0,3)||repKw.slice(-3)||repKw.slice(0,3);
 }
 
 // ── 바이그램 클러스터링 ──────────────────────────────────
@@ -383,7 +419,7 @@ function bigramSim(a, b) {
   const union=new Set([...ba,...bb]).size||1;
   return [...ba].filter(g=>bb.has(g)).length / union;
 }
-function buildClusters(items) {
+function buildClusters(items, rootKw='') {
   const MAX_CL=7, MIN_SIM=0.18;
   const clusters=[];
   [...items].sort((a,b)=>(b._score||0)-(a._score||0)).forEach(item=>{
@@ -399,9 +435,8 @@ function buildClusters(items) {
   });
   clusters.forEach(c=>{
     c.totalScore=c.items.reduce((s,i)=>s+(i._score||0),0);
-    const rep=[...c.items].sort((a,b)=>(b._score||0)-(a._score||0))[0];
-    c.label=rep?.keyword||rep?.label||'';
-    c.repId=(rep?.keyword||rep?.label||'').toLowerCase().trim();
+    // 의미 기반 레이블 (루트 키워드 제거 후 빈출 토큰)
+    c.label=extractClusterLabel(c.items, rootKw)||c.items[0]?.keyword?.slice(0,4)||'기타';
   });
   return clusters.sort((a,b)=>b.totalScore-a.totalScore);
 }
@@ -469,13 +504,13 @@ function boundingForce() {
 }
 
 const simulation=d3.forceSimulation()
-  .force('link',d3.forceLink().id(d=>d.id).distance(d=>35+(d.target?.depth||0)*35).strength(0.7))
-  .force('charge',d3.forceManyBody().strength(-180).distanceMax(350))
+  .force('link',d3.forceLink().id(d=>d.id).distance(28).strength(0.5))
+  .force('charge',d3.forceManyBody().strength(-90).distanceMax(200))
   .force('center',d3.forceCenter(400,300))
   .force('collision',d3.forceCollide().radius(d=>nodeRadius(d)+10))
   .force('bounds',boundingForce)
-  .alphaDecay(0.015)
-  .velocityDecay(0.25);
+  .alphaDecay(0.018)
+  .velocityDecay(0.30);
 
 let nodes=[],links=[];
 const nodeIds=new Set();
@@ -486,24 +521,27 @@ function updateGraph() {
   const el=document.getElementById('graph');
   const W=el.clientWidth||800, H=el.clientHeight||600;
 
-  const d1count = nodes.filter(n=>n.depth===1).length;
-  const innerR = Math.min(W,H)*0.26;
-  const outerR = Math.min(W,H)*0.44;
+  const innerR = Math.min(W,H)*0.27;
+  const outerR = Math.min(W,H)*0.46;
   const clCount = currentClusters.length||1;
-  simulation.force('radial', d3.forceRadial(
-    d => d.depth===0 ? 0 : d.depth===1 ? innerR : outerR, W/2, H/2
-  ).strength(d => d.depth===0 ? 1 : 0.55));
-  // 클러스터 각도 유인력: 같은 클러스터끼리 뭉치게
-  simulation.force('clusterAngle', alpha=>{
-    nodes.forEach(n=>{
-      if(n.depth===0||n.clusterIdx==null) return;
-      const angle=(n.clusterIdx/clCount)*2*Math.PI - Math.PI/2;
-      const r=n.depth===1?innerR:outerR;
-      const tx=W/2+Math.cos(angle)*r, ty=H/2+Math.sin(angle)*r;
-      n.vx+=(tx-n.x)*0.20*alpha;
-      n.vy+=(ty-n.y)*0.20*alpha;
-    });
-  });
+  // 클러스터 섹터 각도 배열
+  const clAngles = currentClusters.map((_,ci)=>(ci/clCount)*2*Math.PI - Math.PI/2);
+  // 노드별 목표 좌표 함수
+  function targetX(n) {
+    if(n.depth===0||n.clusterIdx==null) return W/2;
+    const angle=clAngles[n.clusterIdx]||0;
+    return W/2+Math.cos(angle)*(n.depth===1?innerR:outerR);
+  }
+  function targetY(n) {
+    if(n.depth===0||n.clusterIdx==null) return H/2;
+    const angle=clAngles[n.clusterIdx]||0;
+    return H/2+Math.sin(angle)*(n.depth===1?innerR:outerR);
+  }
+  // forceX/Y로 섹터 고정 (alpha 독립적으로 강하게 유지)
+  simulation
+    .force('clusterX', d3.forceX(targetX).strength(n=>n.depth===0?0:0.82))
+    .force('clusterY', d3.forceY(targetY).strength(n=>n.depth===0?0:0.82))
+    .force('radial',null); // forceX/Y와 중복 제거
 
   // 강도 상위 MAX_LINKS_SHOW개만 표시
   const shownLinks=[...links].sort((a,b)=>(b.strength||0)-(a.strength||0)).slice(0,MAX_LINKS_SHOW);
@@ -521,20 +559,16 @@ function updateGraph() {
       .on('end',  (e,d)=>{if(!e.active)simulation.alphaTarget(0);d.fx=null;d.fy=null;}))
     .on('mouseenter',onHover).on('mouseleave',onLeave).on('click',onClick);
 
+  // 노드 색: depth 기준 유지 (1차=초록, 2차=주황, 루트=파랑)
   enter.append('circle').attr('class','node-glow')
     .attr('r',d=>nodeRadius(d)+10)
-    .attr('fill',d=>d.depth===0?DEPTH_COLORS[0]:d.clusterColor||CLUSTER_COLORS[0])
+    .attr('fill',d=>DEPTH_COLORS[Math.min(d.depth,3)])
     .attr('fill-opacity',0.08).attr('stroke','none');
 
   enter.append('circle').attr('class','node-circle')
     .attr('r',d=>nodeRadius(d))
-    .attr('fill',d=>{
-      if(d.depth===0) return `url(#grad-0)`;
-      // 클러스터 색으로 동적 그라디언트 (인라인 fill)
-      const col=d.clusterColor||CLUSTER_COLORS[0];
-      return hexToRgba(col, DEPTH_OPACITY[Math.min(d.depth,3)]);
-    })
-    .attr('stroke','rgba(255,255,255,0.7)')
+    .attr('fill',d=>`url(#grad-${Math.min(d.depth,3)})`)
+    .attr('stroke','rgba(255,255,255,0.75)')
     .attr('stroke-width',d=>d.depth===0?3:1.5);
 
   // 텍스트 줄바꿈 (tspan)
@@ -566,7 +600,7 @@ function updateGraph() {
   simulation.force('link').links(links);
   simulation.force('collision').radius(d=>nodeRadius(d)+12);
   simulation.force('center',d3.forceCenter(W/2,H/2));
-  simulation.alpha(0.6).restart();
+  simulation.alpha(0.7).restart();
 
   linksG.selectAll('line')
     .attr('stroke',d=>linkColor(d))
@@ -585,29 +619,38 @@ function updateGraph() {
 
 // ── 클러스터 헐 렌더 ──────────────────────────────────────
 function renderHalos() {
-  halosG.selectAll('.ch').data(currentClusters, d=>d.id).join(
+  halosG.selectAll('.ch').data(currentClusters,d=>d.id).join(
     enter=>enter.append('g').attr('class','ch').call(g=>{
       g.append('path').attr('class','ch-fill');
-      g.append('text').attr('class','ch-label')
-        .attr('text-anchor','middle').attr('font-size',10).attr('font-weight',700)
-        .attr('pointer-events','none').attr('dy','0.35em');
+      // 레이블 배경 rect + 텍스트
+      g.append('rect').attr('class','ch-label-bg').attr('rx',5).attr('ry',5);
+      g.append('text').attr('class','ch-label-txt')
+        .attr('text-anchor','middle').attr('font-size',11).attr('font-weight',700)
+        .attr('fill','#fff').attr('pointer-events','none').attr('dy','0.35em');
     })
   ).each(function(cluster){
     const ci=currentClusters.indexOf(cluster);
     const cNodes=nodes.filter(n=>n.clusterIdx===ci&&n.x!=null&&!isNaN(n.x));
     if(!cNodes.length) return;
     const pts=cNodes.map(n=>[n.x,n.y]);
+    const pad=nodeRadius(cNodes[0]||nodes[0])+22;
     d3.select(this).select('.ch-fill')
-      .attr('d',hullPath(pts,nodeRadius(cNodes[0])+20))
-      .attr('fill',cluster.color).attr('fill-opacity',0.07)
-      .attr('stroke',cluster.color).attr('stroke-width',1.5)
-      .attr('stroke-opacity',0.25).attr('stroke-dasharray','6,3');
-    const cx=d3.mean(pts,p=>p[0]), cy=d3.mean(pts,p=>p[1]);
-    const minY=d3.min(pts,p=>p[1]);
-    d3.select(this).select('.ch-label')
-      .attr('x',cx).attr('y',minY-18)
-      .attr('fill',cluster.color).attr('fill-opacity',0.75)
-      .text(cluster.label||'');
+      .attr('d',hullPath(pts,pad))
+      .attr('fill',cluster.color).attr('fill-opacity',0.10)
+      .attr('stroke',cluster.color).attr('stroke-width',2)
+      .attr('stroke-opacity',0.40);
+    // 레이블: hull 상단 중앙에 색상 배지
+    const cx=d3.mean(pts,p=>p[0]);
+    const minY=d3.min(pts,p=>p[1])-pad+8;
+    const label=cluster.label||'';
+    const tw=label.length*7+16; // 텍스트 너비 추정
+    d3.select(this).select('.ch-label-bg')
+      .attr('x',cx-tw/2).attr('y',minY-11)
+      .attr('width',tw).attr('height',20)
+      .attr('fill',cluster.color).attr('fill-opacity',0.85);
+    d3.select(this).select('.ch-label-txt')
+      .attr('x',cx).attr('y',minY)
+      .text(label);
   });
 }
 
@@ -713,8 +756,8 @@ async function collectAll(rootKeyword, rootId, prefetchedRoot) {
     .sort((a,b)=>b._score-a._score)
     .slice(0,MAX_D1);
 
-  // 클러스터 생성
-  currentClusters=buildClusters(scored);
+  // 클러스터 생성 (루트 키워드 기반 의미 레이블 추출)
+  currentClusters=buildClusters(scored, rootKeyword);
   prog(30,`${currentClusters.length}개 토픽 클러스터 생성 완료`);
 
   // depth-1 노드 추가 (클러스터 정보 포함)
