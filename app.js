@@ -370,17 +370,7 @@ function relevanceScore(item, idx) {
   return +(posScore * 0.55 + volScore * 0.45).toFixed(4);
 }
 
-// ── 허브(TOP5) 기반 클러스터 생성 ─────────────────────────
-// 각 허브 노드가 하나의 클러스터를 형성 (색상 + halo용)
-function buildHubClusters(hubItems) {
-  return hubItems.map((item, i) => ({
-    id: `hub-${i}`,
-    hubIdx: i,
-    label: item.keyword || '',  // 허브 키워드 자체가 레이블
-    color: HUB_COLORS[i % HUB_COLORS.length],
-    items: [item],
-  }));
-}
+// currentClusters는 collectAll 내에서 직접 생성 (buildHubClusters 제거)
 
 // ── 클러스터 헐(hull) 패스 ───────────────────────────────
 function hullPath(pts, pad) {
@@ -495,13 +485,14 @@ function updateGraph() {
   const W=el.clientWidth||800, H=el.clientHeight||600;
 
   // 반경: 허브 링 / 2차 링 / 3차 링
-  const hubR  = Math.min(W,H)*0.22;
-  const d2R   = Math.min(W,H)*0.42;
-  const d3R   = Math.min(W,H)*0.62;
+  const hubR  = Math.min(W,H)*0.19;
+  const d2R   = Math.min(W,H)*0.36;
+  const d3R   = Math.min(W,H)*0.48;
 
-  // 허브 각도 (TOP5 균등 배치)
-  const hubNodes = nodes.filter(n=>n.isHub);
-  const hubAngles = hubNodes.map((_,i)=>(i/hubNodes.length)*2*Math.PI - Math.PI/2);
+  // 허브 각도: currentClusters.length 기준 pre-allocate
+  // hubIdx(0~N-1)로 직접 접근하므로 배열 크기 = 실제 허브 수
+  const nHubs = currentClusters.length || MAX_HUB;
+  const hubAngles = Array.from({length:nHubs}, (_,i)=>(i/nHubs)*2*Math.PI - Math.PI/2);
 
   // 허브별 depth-2, depth-3 멤버 인덱스 → 부채꼴 오프셋
   const memberMap={};
@@ -783,14 +774,25 @@ async function collectAll(rootKeyword, rootId, prefetchedRoot) {
   const hubs    = scored.slice(0, MAX_HUB);
   const nonHubs = scored.slice(MAX_HUB, MAX_HUB + MAX_D1);
 
-  // 허브 클러스터 정보 (halo용)
-  currentClusters = buildHubClusters(hubs);
-  prog(20,`TOP${hubs.length} 허브 선정 완료`);
-
-  // 허브 노드 추가 (depth-1, isHub=true)
-  hubs.forEach((item,i)=>{
+  // 실제 추가된 허브만 클러스터로 생성 (skip된 허브 제외)
+  // hubIdx를 sequential로 배정해야 hubAngles[hubIdx] 인덱스 매핑이 정확함
+  const addedHubs = [];
+  hubs.forEach((item)=>{
     const id=item.keyword.toLowerCase().trim();
     if(!id||nodeIds.has(id)) return;
+    addedHubs.push(item);
+  });
+  currentClusters = addedHubs.map((item,i)=>({
+    id:`hub-${i}`, hubIdx:i,
+    label:item.keyword||'',
+    color:HUB_COLORS[i%HUB_COLORS.length],
+    items:[item],
+  }));
+  prog(20,`TOP${addedHubs.length} 허브 선정 완료`);
+
+  // 허브 노드 추가 (sequential hubIdx: 0,1,2,3,4 순서 보장)
+  addedHubs.forEach((item,i)=>{
+    const id=item.keyword.toLowerCase().trim();
     nodeIds.add(id);
     nodes.push({id,label:item.keyword,depth:1,isHub:true,hubIdx:i,
       totalVol:item.totalVol||0,pcVol:item.pcVol||0,mobileVol:item.mobileVol||0,
@@ -813,7 +815,7 @@ async function collectAll(rootKeyword, rootId, prefetchedRoot) {
     links.push({source:rootId,target:id,strength:item._score*0.35});
   });
 
-  prog(30,`depth-2 수집 중 (허브 ${hubs.length}개 병렬)...`);
+  prog(30,`depth-2 수집 중 (허브 ${addedHubs.length}개 병렬)...`);
 
   // Batch 2: 허브당 depth-2 병렬 수집
   const hubNodes=nodes.filter(n=>n.isHub);
