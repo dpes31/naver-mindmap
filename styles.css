@@ -1,24 +1,24 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', system-ui, sans-serif;
+  --font: 'Manrope', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
   --bg: radial-gradient(ellipse at 15% 25%, #bfdbfe 0%, transparent 55%),
         radial-gradient(ellipse at 85% 75%, #ddd6fe 0%, transparent 55%),
         radial-gradient(ellipse at 60% 5%,  #bbf7d0 0%, transparent 45%),
-        #f1f5f9;
-  --glass:  rgba(255,255,255,0.76);
-  --glass2: rgba(255,255,255,0.60);
-  --border: rgba(255,255,255,0.55);
-  --border2: rgba(0,0,0,0.06);
-  --shadow: 0 4px 24px rgba(99,102,241,0.07), 0 1px 4px rgba(0,0,0,0.04);
-  --shadow2: 0 12px 48px rgba(99,102,241,0.12), 0 2px 8px rgba(0,0,0,0.06);
-  --blur: blur(24px) saturate(200%);
-  --accent: #1a56db;
+        #eef2f8;
+  --glass:  rgba(255,255,255,0.42);
+  --glass2: rgba(255,255,255,0.28);
+  --border: rgba(255,255,255,0.22);
+  --border2: rgba(0,0,0,0.05);
+  --shadow: 0 20px 50px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.04);
+  --shadow2: 0 24px 64px rgba(0,0,0,0.13), 0 2px 8px rgba(0,0,0,0.05);
+  --blur: blur(32px) saturate(220%);
+  --accent: #1E40AF;
   --green: #16a34a;
-  --pink: #ec4899;
+  --pink: #EC4899;
   --text: #111827;
   --muted: #6b7280;
-  --r: 16px;
+  --r: 18px;
   --margin: 6%;
 }
 
@@ -29,6 +29,7 @@ html {
 }
 body {
   font-family: var(--font);
+  letter-spacing: -0.02em;
   background: var(--bg);
   min-height: 100vh;
   color: var(--text);
@@ -93,11 +94,11 @@ body {
 /* ── HEADER ── */
 header {
   position: sticky; top: 0; z-index: 200;
-  background: rgba(255,255,255,0.92);
+  background: rgba(255,255,255,0.72);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
-  border-bottom: 1px solid var(--border2);
-  box-shadow: 0 1px 12px rgba(0,0,0,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.3);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.07);
   padding: 12px 32px;
   display: flex; align-items: center; gap: 16px;
 }
@@ -168,6 +169,10 @@ header.hidden { display: none; }
   padding: 22px 24px 24px;
   margin: 20px 0 0;
 }
+.trend-note {
+  font-size: 11px; color: #94a3b8; letter-spacing: 0;
+  margin: 2px 0 6px; line-height: 1.4;
+}
 .panel-header-row {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   margin-bottom: 6px;
@@ -194,11 +199,12 @@ header.hidden { display: none; }
 
 /* 추이 패널 / 카드 래퍼 */
 .trend-panel {
-  background: rgba(255,255,255,0.50);
-  border: 1px solid rgba(255,255,255,0.4);
-  border-radius: 12px;
+  background: rgba(255,255,255,0.32);
+  border: 1px solid rgba(255,255,255,0.22);
+  border-radius: 14px;
   padding: 16px 18px;
   display: flex; flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.06);
 }
 .cards-wrap {
   display: flex; flex-direction: column;
@@ -237,14 +243,15 @@ header.hidden { display: none; }
 .cards-panel::-webkit-scrollbar-thumb:hover { background: #6b7280; }
 
 .kw-card {
-  background: rgba(255,255,255,0.8);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(0,0,0,0.06);
-  border-radius: 12px; padding: 12px 14px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-  transition: box-shadow 0.15s;
+  background: rgba(255,255,255,0.55);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 14px; padding: 12px 14px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+  transition: box-shadow 0.15s, background 0.15s;
 }
-.kw-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+.kw-card:hover { box-shadow: 0 8px 28px rgba(0,0,0,0.10); background: rgba(255,255,255,0.70); }
 
 .card-title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
 .rank-badge {
@@ -281,7 +288,7 @@ header.hidden { display: none; }
   margin: 12px 0 0;
 }
 .ga-card {
-  background: var(--glass);
+  background: rgba(255,255,255,0.42);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--border);
@@ -292,14 +299,14 @@ header.hidden { display: none; }
 .ga-placeholder { font-size: 12px; color: #9ca3af; text-align: center; padding: 12px 0; border: 1.5px dashed #d1d5db; border-radius: 8px; line-height: 1.6; }
 
 /* 성별 바 */
-.gender-bar-wrap { display: flex; border-radius: 8px; overflow: hidden; height: 36px; margin-bottom: 12px; }
+.gender-bar-wrap { display: flex; border-radius: 20px; overflow: hidden; height: 36px; margin-bottom: 12px; gap: 2px; }
 .gender-seg {
   display: flex; align-items: center; overflow: hidden;
   font-size: 12px; font-weight: 700; color: #fff;
   transition: width 0.5s;
 }
-.gender-seg.male  { background: #1a56db; justify-content: flex-start; padding-left: 10px; }
-.gender-seg.female { background: #ec4899; justify-content: flex-end; padding-right: 10px; }
+.gender-seg.male  { background: #1E40AF; justify-content: flex-start; padding-left: 12px; border-radius: 20px 4px 4px 20px; }
+.gender-seg.female { background: #EC4899; justify-content: flex-end; padding-right: 12px; border-radius: 4px 20px 20px 4px; }
 .gender-seg-label { white-space: nowrap; }
 .gender-device-wrap {
   display: flex; gap: 14px; padding-top: 10px;
@@ -309,18 +316,18 @@ header.hidden { display: none; }
 .gender-device-title { font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 5px; }
 .gender-device-bar { display: flex; border-radius: 5px; overflow: hidden; height: 20px; margin-bottom: 4px; }
 .gender-device-seg { transition: width 0.5s; }
-.gender-device-seg.male   { background: #1a56db; }
-.gender-device-seg.female { background: #ec4899; }
+.gender-device-seg.male   { background: #1E40AF; }
+.gender-device-seg.female { background: #EC4899; }
 .gender-device-vals { display: flex; justify-content: space-between; }
-.male-val   { font-size: 11px; font-weight: 600; color: #1a56db; }
-.female-val { font-size: 11px; font-weight: 600; color: #ec4899; }
+.male-val   { font-size: 11px; font-weight: 600; color: #1E40AF; }
+.female-val { font-size: 11px; font-weight: 600; color: #EC4899; }
 
 /* 연령 바 */
 .age-bars { display: flex; flex-direction: column; gap: 7px; }
 .age-row { display: flex; align-items: center; gap: 8px; }
 .age-label { font-size: 11px; font-weight: 600; color: var(--muted); width: 36px; flex-shrink: 0; }
 .age-track { flex: 1; height: 14px; background: #f0f1f3; border-radius: 7px; overflow: hidden; }
-.age-fill { height: 100%; border-radius: 7px; background: linear-gradient(90deg, #6366f1, #a78bfa); transition: width 0.6s; }
+.age-fill { height: 100%; border-radius: 7px; background: linear-gradient(90deg, #1E40AF, #6366f1, #a78bfa); transition: width 0.6s; }
 .age-val { font-size: 11px; font-weight: 600; color: var(--text); width: 38px; text-align: right; flex-shrink: 0; }
 
 /* ── 마인드맵 섹션 ── */
@@ -336,7 +343,7 @@ header.hidden { display: none; }
 }
 .mindmap-content-wrap {
   flex: 1; display: flex; flex-direction: column;
-  background: rgba(255,255,255,0.55);
+  background: rgba(255,255,255,0.38);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--border);

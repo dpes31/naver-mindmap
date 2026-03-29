@@ -233,7 +233,7 @@ function renderTrendChart(trendData, pcAbsNow, moAbsNow) {
   [['mo','#16a34a'],['pc','#1a56db']].forEach(([k,c])=>{
     svg.append('path').datum(data)
       .attr('d',d3.area().x(xPos).y0(h).y1(d=>y(d[k])).curve(d3.curveMonotoneX))
-      .attr('fill',c).attr('fill-opacity',0.07);
+      .attr('fill',c).attr('fill-opacity',0.13);
     svg.append('path').datum(data)
       .attr('d',d3.line().x(xPos).y(d=>y(d[k])).curve(d3.curveMonotoneX))
       .attr('fill','none').attr('stroke',c).attr('stroke-width',2.5);
@@ -264,8 +264,8 @@ function renderTrendChart(trendData, pcAbsNow, moAbsNow) {
       const ttx=rect.left+margin.left+cx+16;
       const tty=rect.top+margin.top+Math.min(y(d.pc),y(d.mo))-12;
       chartTip.innerHTML=`<div class="ct-date">${d.period}</div>
-        <div class="ct-row"><span class="ct-dot" style="background:#1a56db"></span>PC<b>${d.pc.toLocaleString()}건</b></div>
-        <div class="ct-row"><span class="ct-dot" style="background:#16a34a"></span>Mobile<b>${d.mo.toLocaleString()}건</b></div>`;
+        <div class="ct-row"><span class="ct-dot" style="background:#1a56db"></span>PC<b>약 ${d.pc.toLocaleString()}건</b></div>
+        <div class="ct-row"><span class="ct-dot" style="background:#16a34a"></span>Mobile<b>약 ${d.mo.toLocaleString()}건</b></div>`;
       chartTip.style.left=Math.min(ttx,window.innerWidth-180)+'px';
       chartTip.style.top=Math.max(tty,60)+'px';
       chartTip.classList.add('visible');
@@ -687,6 +687,20 @@ function onHover(e,d) {
   tooltipEl.textContent=d.label;
   tooltipEl.style.left=(e.clientX+14)+'px';tooltipEl.style.top=(e.clientY-8)+'px';
   tooltipEl.classList.add('visible');
+  // 연결된 노드/링크만 강조, 나머지 흐리게
+  const connectedIds=new Set([d.id]);
+  links.forEach(lk=>{
+    const s=lk.source?.id||lk.source, t=lk.target?.id||lk.target;
+    if(s===d.id) connectedIds.add(t);
+    if(t===d.id) connectedIds.add(s);
+  });
+  nodesG.selectAll('g.node-group').transition().duration(150)
+    .style('opacity',n=>connectedIds.has(n.id)?1:0.18);
+  linksG.selectAll('line').transition().duration(150)
+    .style('opacity',lk=>{
+      const s=lk.source?.id||lk.source, t=lk.target?.id||lk.target;
+      return (s===d.id||t===d.id)?1:0.06;
+    });
 }
 function onLeave(e,d) {
   const r=nodeRadius(d);
@@ -694,6 +708,8 @@ function onLeave(e,d) {
   const glowOp=d.depth===0?0.32:d.isHub?0.26:d.depth===1?0.20:d.depth===2?0.18:0.14;
   d3.select(this).select('.node-glow').transition().duration(150).attr('fill-opacity',glowOp);
   tooltipEl.classList.remove('visible');
+  nodesG.selectAll('g.node-group').transition().duration(200).style('opacity',1);
+  linksG.selectAll('line').transition().duration(200).style('opacity',1);
 }
 function onClick(e,d) {
   e.stopPropagation();
