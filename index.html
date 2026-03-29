@@ -34,29 +34,15 @@
 <main id="results-wrap" class="hidden">
 <div class="page-wrap">
 
-  <!-- ── 월간 검색량 + 연관 키워드 ── -->
+  <!-- ── 연관 키워드 (Search Ads API 기준) ── -->
   <section class="stats-section">
-    <div class="stats-body">
+    <div class="stats-body stats-body--full">
 
-      <!-- 좌: 추이 차트 -->
-      <div class="trend-panel">
+      <!-- 키워드 카드 5개 -->
+      <div class="cards-wrap cards-wrap--full">
         <div class="panel-header-row">
-          <span class="panel-main-title">월간 검색량</span>
-          <button id="copy-trend-btn" class="copy-btn" title="Excel 복사">📋 복사</button>
-        </div>
-        <div class="panel-sub-row">
-          <div id="trend-legend" class="trend-legend-row"></div>
-        </div>
-        <div id="trend-chart"></div>
-      </div>
-
-      <!-- 우: 키워드 카드 5개 -->
-      <div class="cards-wrap">
-        <div class="panel-header-row">
-          <span class="panel-main-title">연관 키워드</span>
-        </div>
-        <div class="panel-sub-row">
-          <span class="panel-sub-note" style="margin-left:auto">검색량 많은 순 정렬 · TOP 5</span>
+          <span class="panel-main-title">월간 검색량 현황</span>
+          <span class="panel-sub-note">Search Ads API 기준 · 최근 1개월 · 조사어 + 연관 TOP 9</span>
         </div>
         <div class="cards-panel" id="kw-cards"></div>
       </div>
