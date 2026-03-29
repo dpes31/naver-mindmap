@@ -106,172 +106,57 @@ async function fetchTrend(keyword) {
 function fmtN(n) { return (n||0).toLocaleString()+'건'; }
 function fmtCtr(v) { return (v||0)+'%'; }
 
-// ── 통계 카드 렌더 (TOP 5: 검색어 + 후순위 4개) ─────────
+// ── 통계 테이블 렌더 (Naver 키워드 도구 스타일) ─────────
 function renderStats(keyword, items) {
   const wrap = document.getElementById('kw-cards');
   wrap.innerHTML = '';
 
-  // 검색어 자체를 첫 번째로 — 나머지 4개 상위 연관어 (정규화 비교로 중복 방지)
   const normKw = keyword.toLowerCase().trim();
-  const rootItem = items.find(d=>d.keyword.toLowerCase().trim()===normKw) || {keyword, totalVol:0,pcVol:0,mobileVol:0,pcClicks:0,mobileClicks:0,pcCtr:0,mobileCtr:0};
-  const top4 = items.filter(d => d.keyword.toLowerCase().trim()!==normKw).slice(0, 4);
-  const cards = [rootItem, ...top4];
+  const rootItem = items.find(d=>d.keyword.toLowerCase().trim()===normKw)
+    || {keyword, totalVol:0, pcVol:0, mobileVol:0, pcClicks:0, mobileClicks:0, pcCtr:0, mobileCtr:0};
+  const others = items.filter(d=>d.keyword.toLowerCase().trim()!==normKw).slice(0, 9);
+  const allItems = [rootItem, ...others];
 
-  const maxVol = Math.max(...cards.map(d=>d.pcVol+d.mobileVol), 1);
+  const maxVol = Math.max(...allItems.map(d=>(d.pcVol||0)+(d.mobileVol||0)), 1);
 
-  cards.forEach((d, i) => {
-    const pcPct  = Math.max(1, Math.round((d.pcVol / maxVol) * 100));
-    const mobPct = Math.max(1, Math.round((d.mobileVol / maxVol) * 100));
-    const clicks = (d.pcClicks||0) + (d.mobileClicks||0);
+  const compLabel = v => v==='high'?'높음':v==='mid'?'보통':v==='low'?'낮음':'-';
+  const compClass = v => v==='high'?'comp-high':v==='mid'?'comp-mid':v==='low'?'comp-low':'';
 
-    const card = document.createElement('div');
-    card.className = 'kw-card';
-    card.innerHTML = `
-      <div class="card-title-row">
-        <div class="rank-badge ${i===0?'rank-1':''}">${i+1}</div>
-        <div class="card-kw-name">${d.keyword}</div>
+  wrap.innerHTML = `
+    <div class="vol-table-wrap">
+      <div class="vol-table-header">
+        <span class="vol-col-kw">키워드</span>
+        <span class="vol-col-pc">PC 월간검색수</span>
+        <span class="vol-col-mo">Mobile 월간검색수</span>
+        <span class="vol-col-total">합계</span>
+        <span class="vol-col-ctr">PC CTR</span>
+        <span class="vol-col-comp">경쟁도</span>
       </div>
-      <div class="card-bars">
-        <div class="card-bar-row">
-          <span class="card-bar-label pc">PC</span>
-          <div class="card-bar-track"><div class="card-bar-fill pc" style="width:${pcPct}%"></div></div>
-          <span class="card-bar-val">${(d.pcVol||0).toLocaleString()}</span>
-        </div>
-        <div class="card-bar-row">
-          <span class="card-bar-label mo">MO</span>
-          <div class="card-bar-track"><div class="card-bar-fill mo" style="width:${mobPct}%"></div></div>
-          <span class="card-bar-val">${(d.mobileVol||0).toLocaleString()}</span>
-        </div>
-      </div>
-      <div class="card-detail">
-        <table class="card-detail-table">
-          <thead><tr><th></th><th>검색량</th><th>클릭율</th></tr></thead>
-          <tbody>
-            <tr><td>PC</td><td><b>${fmtN(d.pcVol)}</b></td><td>${fmtCtr(d.pcCtr)}</td></tr>
-            <tr><td>MO</td><td><b>${fmtN(d.mobileVol)}</b></td><td>${fmtCtr(d.mobileCtr)}</td></tr>
-          </tbody>
-        </table>
-      </div>`;
-    wrap.appendChild(card);
-  });
+      ${allItems.map((d, i) => {
+        const total = (d.pcVol||0)+(d.mobileVol||0);
+        const pcPct = Math.round((d.pcVol||0)/maxVol*100);
+        const moPct = Math.round((d.mobileVol||0)/maxVol*100);
+        const isRoot = i===0;
+        return `
+          <div class="vol-row${isRoot?' vol-row--root':''}">
+            <div class="vol-col-kw">${isRoot?'<span class="vol-root-badge">조사어</span>':''}<span class="vol-kw-text">${d.keyword}</span></div>
+            <div class="vol-col-pc">
+              <div class="vol-bar-wrap"><div class="vol-bar pc" style="width:${pcPct}%"></div></div>
+              <span class="vol-num">${(d.pcVol||0).toLocaleString()}</span>
+            </div>
+            <div class="vol-col-mo">
+              <div class="vol-bar-wrap"><div class="vol-bar mo" style="width:${moPct}%"></div></div>
+              <span class="vol-num">${(d.mobileVol||0).toLocaleString()}</span>
+            </div>
+            <div class="vol-col-total"><b>${total.toLocaleString()}</b></div>
+            <div class="vol-col-ctr">${d.pcCtr||0}%</div>
+            <div class="vol-col-comp"><span class="comp-badge ${compClass(d.compIdx)}">${compLabel(d.compIdx)}</span></div>
+          </div>`;
+      }).join('')}
+      <div class="vol-table-footer">Search Ads API 기준 · 최근 1개월 rolling 검색수</div>
+    </div>`;
 }
 
-// ── DataLab 상대지수 → 절대값 변환 ──────────────────
-// DataLab 상대 지수를 Search Ads API 절대값으로 변환
-// 기준: 마지막 DataLab 데이터포인트 = Search Ads API 현재 월 절대값 (1:1 anchoring)
-// 나머지 월 = DataLab 상대 비율로 비례 계산
-// ※ Search Ads API는 현재 월 1개 값만 제공 → 과거 월은 DataLab 비율로 역산한 추정치
-function scaleTrend(trend, pcAbs, moAbs) {
-  if (!trend?.length) return trend;
-  const last = trend[trend.length - 1];
-  const pcRef = last?.pc || 1, moRef = last?.mo || 1;
-  return trend.map(d=>({
-    period: d.period,
-    pc: pcAbs > 0 ? Math.round(d.pc / pcRef * pcAbs) : Math.round(d.pc),
-    mo: moAbs > 0 ? Math.round(d.mo / moRef * moAbs) : Math.round(d.mo),
-  }));
-}
-let currentTrendData=null;
-function copyTrendData() {
-  if (!currentTrendData?.length){showToast('복사할 데이터가 없습니다');return;}
-  const hdr='\t'+currentTrendData.map(d=>d.period).join('\t');
-  const pc='PC\t'+currentTrendData.map(d=>d.pc).join('\t');
-  const mo='MO\t'+currentTrendData.map(d=>d.mo).join('\t');
-  navigator.clipboard.writeText([hdr,pc,mo].join('\n'))
-    .then(()=>showToast('복사 완료 — Excel에 붙여넣기 하세요'))
-    .catch(()=>showToast('복사 실패 — 브라우저 권한 확인'));
-}
-
-// ── 추이 라인차트 (D3) ────────────────────────────────
-function renderTrendChart(trendData, pcAbsNow, moAbsNow) {
-  const container = document.getElementById('trend-chart');
-  const legendEl  = document.getElementById('trend-legend');
-  container.innerHTML = '';
-  if (legendEl) legendEl.innerHTML = '';
-
-  if (!trendData || trendData.length === 0) {
-    container.innerHTML = '<div class="trend-placeholder">DataLab API 데이터 없음<span style="font-size:11px;display:block;margin-top:4px">Vercel 환경변수: NAVER_DATALAB_CLIENT_ID / SECRET 확인</span></div>';
-    return;
-  }
-
-  // Search Ads API 절대값 기준으로 스케일링 (마지막 월 = Search Ads API 정확값)
-  const data = scaleTrend(trendData, pcAbsNow||0, moAbsNow||0);
-  currentTrendData = data;
-
-  if (legendEl) legendEl.innerHTML =
-    `<div class="tl-item"><div class="tl-dot" style="background:#1a56db"></div>PC 검색수</div>
-     <div class="tl-item"><div class="tl-dot" style="background:#16a34a"></div>Mobile 검색수</div>`;
-
-  const margin={top:12,right:16,bottom:36,left:60};
-  const W=container.clientWidth||420, H=Math.max(200, container.clientHeight||230);
-  const w=W-margin.left-margin.right, h=H-margin.top-margin.bottom;
-
-  const svg=d3.select(container).append('svg')
-    .attr('width','100%').attr('height',H).attr('viewBox',`0 0 ${W} ${H}`)
-    .append('g').attr('transform',`translate(${margin.left},${margin.top})`);
-
-  const x=d3.scaleBand().domain(data.map(d=>d.period)).range([0,w]).padding(0.1);
-  const yMax=d3.max(data,d=>Math.max(d.pc,d.mo))*1.18||100;
-  const y=d3.scaleLinear().domain([0,yMax]).range([h,0]).nice();
-  const xPos=d=>x(d.period)+x.bandwidth()/2;
-
-  svg.append('g').attr('class','grid').call(
-    d3.axisLeft(y).tickSize(-w).tickFormat('').ticks(5)
-  ).selectAll('line').attr('stroke','#e5e7eb').attr('stroke-dasharray','3,3');
-  svg.select('.grid .domain').remove();
-
-  const xAx=svg.append('g').attr('transform',`translate(0,${h})`).call(d3.axisBottom(x).tickFormat(d=>d.slice(2)));
-  xAx.selectAll('text').attr('font-size',10).attr('fill','#6b7280');
-  xAx.select('.domain').attr('stroke','#e5e7eb');
-
-  // Y축: 실제 검색량 숫자 (만/천 단위 포맷)
-  const yFmt=v=>v>=10000?(v/10000).toFixed(1)+'만':v>=1000?(v/1000).toFixed(0)+'천':v;
-  const yAx=svg.append('g').call(d3.axisLeft(y).ticks(5).tickFormat(yFmt));
-  yAx.selectAll('text').attr('font-size',10).attr('fill','#6b7280');
-  yAx.select('.domain').attr('stroke','#e5e7eb');
-
-  [['mo','#16a34a'],['pc','#1a56db']].forEach(([k,c])=>{
-    svg.append('path').datum(data)
-      .attr('d',d3.area().x(xPos).y0(h).y1(d=>y(d[k])).curve(d3.curveMonotoneX))
-      .attr('fill',c).attr('fill-opacity',0.07);
-    svg.append('path').datum(data)
-      .attr('d',d3.line().x(xPos).y(d=>y(d[k])).curve(d3.curveMonotoneX))
-      .attr('fill','none').attr('stroke',c).attr('stroke-width',2.5);
-    svg.selectAll(`.dot-${k}`).data(data).enter().append('circle')
-      .attr('cx',xPos).attr('cy',d=>y(d[k])).attr('r',3.5)
-      .attr('fill',c).attr('stroke','#fff').attr('stroke-width',1.5);
-  });
-
-  // ── 호버 툴팁 ──
-  const hoverG = svg.append('g').attr('pointer-events','none').style('display','none');
-  hoverG.append('line').attr('class','h-line').attr('y1',0).attr('y2',h)
-    .attr('stroke','#cbd5e1').attr('stroke-width',1.5).attr('stroke-dasharray','4,3');
-  hoverG.append('circle').attr('class','h-dot-pc').attr('r',6).attr('fill','#1a56db').attr('stroke','#fff').attr('stroke-width',2);
-  hoverG.append('circle').attr('class','h-dot-mo').attr('r',6).attr('fill','#16a34a').attr('stroke','#fff').attr('stroke-width',2);
-
-  const chartTip = document.getElementById('chart-tooltip');
-  svg.append('rect').attr('width',w).attr('height',h).attr('fill','none').attr('pointer-events','all')
-    .on('mousemove', function(event) {
-      const [mx] = d3.pointer(event);
-      let ni=0, minD=Infinity;
-      data.forEach((d,i)=>{const cx=xPos(d);const dist=Math.abs(cx-mx);if(dist<minD){minD=dist;ni=i;}});
-      const d=data[ni]; const cx=xPos(d);
-      hoverG.style('display',null);
-      hoverG.select('.h-line').attr('x1',cx).attr('x2',cx);
-      hoverG.select('.h-dot-pc').attr('cx',cx).attr('cy',y(d.pc));
-      hoverG.select('.h-dot-mo').attr('cx',cx).attr('cy',y(d.mo));
-      const rect=container.getBoundingClientRect();
-      const ttx=rect.left+margin.left+cx+16;
-      const tty=rect.top+margin.top+Math.min(y(d.pc),y(d.mo))-12;
-      chartTip.innerHTML=`<div class="ct-date">${d.period}</div>
-        <div class="ct-row"><span class="ct-dot" style="background:#1a56db"></span>PC<b>${d.pc.toLocaleString()}건</b></div>
-        <div class="ct-row"><span class="ct-dot" style="background:#16a34a"></span>Mobile<b>${d.mo.toLocaleString()}건</b></div>`;
-      chartTip.style.left=Math.min(ttx,window.innerWidth-180)+'px';
-      chartTip.style.top=Math.max(tty,60)+'px';
-      chartTip.classList.add('visible');
-    })
-    .on('mouseleave',()=>{hoverG.style('display','none');chartTip.classList.remove('visible');});
-}
 
 // ── 성별/연령 렌더 ────────────────────────────────────
 function renderGenderAge(data) {
@@ -1022,8 +907,6 @@ document.getElementById('headerBtn').addEventListener('click',()=>{
 document.getElementById('headerInput').addEventListener('keydown',e=>{
   if(e.key==='Enter'){const kw=e.target.value.trim();if(kw){document.getElementById('searchInput').value=kw;startSearch(kw);}}
 });
-const copyTrendBtn=document.getElementById('copy-trend-btn');
-if(copyTrendBtn) copyTrendBtn.addEventListener('click',copyTrendData);
 const dlBtn=document.getElementById('download-btn');
 if(dlBtn) dlBtn.addEventListener('click',downloadExcel);
 window.addEventListener('resize',()=>{
