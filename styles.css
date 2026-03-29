@@ -87,7 +87,7 @@ body {
   cursor: pointer; transition: background 0.2s, transform 0.1s;
   white-space: nowrap;
 }
-.hero-search-box button:hover { background: #1648c0; }
+.hero-search-box button:hover { background: #1a35a0; }
 .hero-search-box button:active { transform: scale(0.97); }
 .hero-search-box button:disabled { background: #9ca3af; cursor: not-allowed; }
 
@@ -122,7 +122,7 @@ header.hidden { display: none; }
   cursor: pointer; white-space: nowrap;
   transition: background 0.2s, transform 0.1s;
 }
-#headerBtn:hover { background: #1648c0; }
+#headerBtn:hover { background: #1a35a0; }
 #headerBtn:disabled { background: #9ca3af; cursor: not-allowed; }
 .brand { font-size: 16px; font-weight: 700; letter-spacing: -0.5px; white-space: nowrap; }
 .brand span { color: var(--accent); }
@@ -145,7 +145,7 @@ header.hidden { display: none; }
   cursor: pointer; white-space: nowrap;
   transition: background 0.2s, transform 0.1s;
 }
-#searchBtn:hover { background: #1648c0; }
+#searchBtn:hover { background: #1a35a0; }
 #searchBtn:active { transform: scale(0.97); }
 #searchBtn:disabled { background: #9ca3af; cursor: not-allowed; }
 
@@ -271,7 +271,7 @@ header.hidden { display: none; }
 .card-bar-label.mo { color: var(--green); }
 .card-bar-track  { flex: 1; height: 13px; background: #f0f1f3; border-radius: 7px; overflow: hidden; }
 .card-bar-fill   { height: 100%; border-radius: 7px; transition: width 0.5s; }
-.card-bar-fill.pc { background: linear-gradient(90deg, #1a56db, #60a5fa); }
+.card-bar-fill.pc { background: linear-gradient(90deg, #1E40AF, #60a5fa); }
 .card-bar-fill.mo { background: linear-gradient(90deg, #16a34a, #4ade80); }
 .card-bar-val { font-size: 11px; font-weight: 600; color: var(--text); min-width: 48px; text-align: right; flex-shrink: 0; }
 .card-detail { border-top: 1px solid #f0f1f3; padding-top: 7px; }
@@ -333,7 +333,7 @@ header.hidden { display: none; }
 /* ── 마인드맵 섹션 ── */
 .mindmap-outer {
   display: flex;
-  height: 78vh; min-height: 500px;
+  height: 82vh; min-height: 600px;
   margin-top: 12px;
   position: sticky; top: 0; z-index: 5;
   will-change: transform;

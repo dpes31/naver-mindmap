@@ -1,5 +1,5 @@
 // ── 설정 ──────────────────────────────────────────
-const ROOT_COLOR     = '#1a56db';   // 검색어 노드 (타이틀 파란색)
+const ROOT_COLOR     = '#1E40AF';   // 검색어 노드 (타이틀 파란색)
 // 카테고리 halo 배경 색 (초록 계열 제외 — HUB 딥그린과 겹침 방지)
 const CLUSTER_COLORS = ['#3b82f6','#f59e0b','#ec4899','#8b5cf6','#06b6d4'];
 // 노드 fill 색 (역할별)
@@ -199,7 +199,7 @@ function renderTrendChart(trendData, pcAbsNow, moAbsNow) {
   currentTrendData = data;
 
   if (legendEl) legendEl.innerHTML =
-    `<div class="tl-item"><div class="tl-dot" style="background:#1a56db"></div>PC 검색수</div>
+    `<div class="tl-item"><div class="tl-dot" style="background:#1E40AF"></div>PC 검색수</div>
      <div class="tl-item"><div class="tl-dot" style="background:#16a34a"></div>Mobile 검색수</div>`;
 
   const margin={top:12,right:16,bottom:36,left:60};
@@ -230,7 +230,7 @@ function renderTrendChart(trendData, pcAbsNow, moAbsNow) {
   yAx.selectAll('text').attr('font-size',10).attr('fill','#6b7280');
   yAx.select('.domain').attr('stroke','#e5e7eb');
 
-  [['mo','#16a34a'],['pc','#1a56db']].forEach(([k,c])=>{
+  [['mo','#16a34a'],['pc','#1E40AF']].forEach(([k,c])=>{
     svg.append('path').datum(data)
       .attr('d',d3.area().x(xPos).y0(h).y1(d=>y(d[k])).curve(d3.curveMonotoneX))
       .attr('fill',c).attr('fill-opacity',0.13);
@@ -246,7 +246,7 @@ function renderTrendChart(trendData, pcAbsNow, moAbsNow) {
   const hoverG = svg.append('g').attr('pointer-events','none').style('display','none');
   hoverG.append('line').attr('class','h-line').attr('y1',0).attr('y2',h)
     .attr('stroke','#cbd5e1').attr('stroke-width',1.5).attr('stroke-dasharray','4,3');
-  hoverG.append('circle').attr('class','h-dot-pc').attr('r',6).attr('fill','#1a56db').attr('stroke','#fff').attr('stroke-width',2);
+  hoverG.append('circle').attr('class','h-dot-pc').attr('r',6).attr('fill','#1E40AF').attr('stroke','#fff').attr('stroke-width',2);
   hoverG.append('circle').attr('class','h-dot-mo').attr('r',6).attr('fill','#16a34a').attr('stroke','#fff').attr('stroke-width',2);
 
   const chartTip = document.getElementById('chart-tooltip');
@@ -264,7 +264,7 @@ function renderTrendChart(trendData, pcAbsNow, moAbsNow) {
       const ttx=rect.left+margin.left+cx+16;
       const tty=rect.top+margin.top+Math.min(y(d.pc),y(d.mo))-12;
       chartTip.innerHTML=`<div class="ct-date">${d.period}</div>
-        <div class="ct-row"><span class="ct-dot" style="background:#1a56db"></span>PC<b>약 ${d.pc.toLocaleString()}건</b></div>
+        <div class="ct-row"><span class="ct-dot" style="background:#1E40AF"></span>PC<b>약 ${d.pc.toLocaleString()}건</b></div>
         <div class="ct-row"><span class="ct-dot" style="background:#16a34a"></span>Mobile<b>약 ${d.mo.toLocaleString()}건</b></div>`;
       chartTip.style.left=Math.min(ttx,window.innerWidth-180)+'px';
       chartTip.style.top=Math.max(tty,60)+'px';
@@ -341,8 +341,8 @@ function renderGenderAge(data) {
 // ── 노드 반경 (검색량 비례 — 같은 depth 내 log 스케일) ────
 // base: 역할별 기본 크기 / range: ±range 범위로 검색량 비례 변화
 function nodeRadius(d) {
-  const base  = d.depth===0?50:d.isHub?32:d.depth===1?16:d.depth===2?20:12;
-  const range = d.depth===0?0:d.isHub?14:d.depth===1?6:d.depth===2?9:5;
+  const base  = d.depth===0?52:d.isHub?36:d.depth===1?18:d.depth===2?22:13;
+  const range = d.depth===0?0:d.isHub?16:d.depth===1?7:d.depth===2?10:5;
   if (!d.totalVol || range===0 || !nodes.length) return base;
   const peers = nodes.filter(n => d.isHub ? n.isHub : (n.depth===d.depth && !n.isHub));
   const maxVol = Math.max(...peers.map(n=>n.totalVol), 1);
@@ -475,7 +475,7 @@ function boundingForce() {
 
 const simulation=d3.forceSimulation()
   .force('link',d3.forceLink().id(d=>d.id).distance(32).strength(0.45))
-  .force('charge',d3.forceManyBody().strength(d=>d.depth===0?-300:d.isHub?-160:d.depth===3?-40:-80).distanceMax(250))
+  .force('charge',d3.forceManyBody().strength(d=>d.depth===0?-420:d.isHub?-240:d.depth===3?-65:-120).distanceMax(340))
   .force('center',d3.forceCenter(400,300))
   .force('collision',d3.forceCollide().radius(d=>nodeRadius(d)+8))
   .force('bounds',boundingForce)
@@ -568,8 +568,8 @@ function updateGraph() {
 
   // 링크 (강도 상위 MAX_LINKS_SHOW개)
   const shownLinks=[...links].sort((a,b)=>(b.strength||0)-(a.strength||0)).slice(0,MAX_LINKS_SHOW);
-  const link=linksG.selectAll('line').data(shownLinks,d=>`${d.source?.id||d.source}→${d.target?.id||d.target}`);
-  link.enter().append('line').attr('stroke-linecap','round');
+  const link=linksG.selectAll('path.link-path').data(shownLinks,d=>`${d.source?.id||d.source}→${d.target?.id||d.target}`);
+  link.enter().append('path').attr('class','link-path').attr('fill','none').attr('stroke-linecap','round');
   link.exit().remove();
 
   const node=nodesG.selectAll('g.node-group').data(nodes,d=>d.id);
@@ -590,12 +590,13 @@ function updateGraph() {
     .attr('filter','url(#soft-blur)')
     .attr('stroke','none');
 
-  // 메인 원 — flat solid fill, 테두리 없음 (버블 스타일)
+  // 메인 원 — glassmorphism: 반투명 fill + white specular stroke
   enter.append('circle').attr('class','node-circle')
     .attr('r',d=>nodeRadius(d))
     .attr('fill',d=>nodeFillColor(d))
-    .attr('fill-opacity',d=>d.depth===3?0.82:d.depth===1&&!d.isHub?0.90:0.96)
-    .attr('stroke','none');
+    .attr('fill-opacity',d=>d.depth===3?0.78:d.depth===1&&!d.isHub?0.84:0.92)
+    .attr('stroke','rgba(255,255,255,0.55)')
+    .attr('stroke-width',d=>d.depth===0?2.5:d.isHub?2.0:1.5);
 
   // 텍스트 — 클린 볼드, 테두리 없음
   enter.each(function(d) {
@@ -629,26 +630,30 @@ function updateGraph() {
   simulation.force('link').links(links);
   simulation.force('link').distance(d=>{
     const t=nodes.find(n=>n.id===(d.target?.id||d.target));
-    if(!t) return 40;
-    if(t.isHub) return 32;
-    if(t.depth===1) return 22;
-    if(t.depth===2) return 28;
-    if(t.depth===3) return 24;
-    return 30;
+    if(!t) return 55;
+    if(t.isHub) return 48;
+    if(t.depth===1) return 32;
+    if(t.depth===2) return 42;
+    if(t.depth===3) return 36;
+    return 44;
   });
-  simulation.force('collision').radius(d=>nodeRadius(d)+(d.depth===0?20:d.isHub?14:d.depth===1?10:d.depth===2?9:7));
+  simulation.force('collision').radius(d=>nodeRadius(d)+(d.depth===0?26:d.isHub?20:d.depth===1?14:d.depth===2?13:10));
   simulation.force('center',d3.forceCenter(W/2,H/2));
   simulation.alpha(0.75).restart();
 
-  linksG.selectAll('line')
+  linksG.selectAll('path.link-path')
     .attr('stroke',d=>linkColor(d))
     .attr('stroke-width',d=>linkWidth(d));
 
   let tickCount=0;
   simulation.on('tick',()=>{
-    linksG.selectAll('line')
-      .attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
-      .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+    linksG.selectAll('path.link-path').attr('d',d=>{
+      const sx=d.source.x,sy=d.source.y,tx=d.target.x,ty=d.target.y;
+      const dx=tx-sx,dy=ty-sy,len=Math.sqrt(dx*dx+dy*dy)||1;
+      const ox=-dy/len*len*0.14, oy=dx/len*len*0.14;
+      const mx=(sx+tx)/2+ox, my=(sy+ty)/2+oy;
+      return `M${sx.toFixed(1)},${sy.toFixed(1)} Q${mx.toFixed(1)},${my.toFixed(1)} ${tx.toFixed(1)},${ty.toFixed(1)}`;
+    });
     nodesG.selectAll('g.node-group').attr('transform',d=>`translate(${d.x},${d.y})`);
     if(tickCount++%4===0) renderHalos();
   });
@@ -696,7 +701,7 @@ function onHover(e,d) {
   });
   nodesG.selectAll('g.node-group').transition().duration(150)
     .style('opacity',n=>connectedIds.has(n.id)?1:0.18);
-  linksG.selectAll('line').transition().duration(150)
+  linksG.selectAll('path.link-path').transition().duration(150)
     .style('opacity',lk=>{
       const s=lk.source?.id||lk.source, t=lk.target?.id||lk.target;
       return (s===d.id||t===d.id)?1:0.06;
@@ -709,7 +714,7 @@ function onLeave(e,d) {
   d3.select(this).select('.node-glow').transition().duration(150).attr('fill-opacity',glowOp);
   tooltipEl.classList.remove('visible');
   nodesG.selectAll('g.node-group').transition().duration(200).style('opacity',1);
-  linksG.selectAll('line').transition().duration(200).style('opacity',1);
+  linksG.selectAll('path.link-path').transition().duration(200).style('opacity',1);
 }
 function onClick(e,d) {
   e.stopPropagation();
