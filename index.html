@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>네이버 연관검색어 마인드맵</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 </head>
@@ -44,6 +47,7 @@
           <span class="panel-main-title">월간 검색량</span>
           <button id="copy-trend-btn" class="copy-btn" title="Excel 복사">📋 복사</button>
         </div>
+        <p class="trend-note">※ 월별 추정된 쿼리수입니다 (DataLab 상대지수 기반 추정치)</p>
         <div class="panel-sub-row">
           <div id="trend-legend" class="trend-legend-row"></div>
         </div>
@@ -91,7 +95,7 @@
           <div class="mm-legend-item"><div class="mm-dot" style="background:#f59e0b"></div>2차 연관</div>
           <div class="mm-legend-item"><div class="mm-dot" style="background:#8b5cf6"></div>3차 연관</div>
         </div>
-        <button id="download-btn" class="mm-download-btn">⬇ 데이터 다운로드</button>
+        <button id="download-btn" class="mm-download-btn" style="display:none">⬇ 데이터 다운로드</button>
       </div>
       <div class="mindmap-content">
         <svg id="graph"></svg>
