@@ -585,6 +585,10 @@ header.hidden { display: none; }
   .panel-main-title { font-size: 16px; }
   .ga-title  { font-size: 16px; }
   .kw-card   { padding: 10px 12px; }
+  .vol-table-header,
+  .vol-row { grid-template-columns: 1.8fr 2fr 2fr 0.8fr 0fr 0fr; }
+  .vol-col-ctr, .vol-col-comp { display: none; }
+  .vol-num { min-width: 32px; font-size: 11px; }
 
   /* 마인드맵 */
   .mindmap-outer {
