@@ -596,7 +596,7 @@ function updateGraph() {
     .style('opacity',0).style('cursor','pointer')
     .call(d3.drag()
       .on('start',(e,d)=>{if(!e.active)simulation.alphaTarget(0.1).restart();d.fx=d.x;d.fy=d.y;tooltipEl.classList.remove('visible');})
-      .on('drag',onDrag)
+      .on('drag',(e,d)=>{d.fx=e.x;d.fy=e.y;showInfoCard(d);})
       .on('end',(e,d)=>{if(!e.active)simulation.alphaTarget(0);d.fx=null;d.fy=null;}))
     .on('mouseenter',onHover).on('mouseleave',onLeave).on('click',onClick);
 
