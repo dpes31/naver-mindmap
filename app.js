@@ -108,7 +108,11 @@ async function fetchViaProxy(keyword) {
   ];
   for (const u of urls) {
     try {
-      const r=await fetch('https://api.allorigins.win/raw?url='+encodeURIComponent(u),{signal:AbortSignal.timeout(9000)});
+      // AbortSignal.timeout 호환성 문제 해결을 위해 전형적인 fetch 구조 사용
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 9000);
+      const r=await fetch('https://api.allorigins.win/raw?url='+encodeURIComponent(u),{signal:controller.signal});
+      clearTimeout(tid);
       if(r.ok){const kws=parseRelatedFromHtml(await r.text());if(kws.length>=2)return kws;}
     } catch(e){}
   }
@@ -130,7 +134,10 @@ function fetchAutocomplete(keyword) {
 
 async function fetchNaverKeywords(keyword) {
   try {
-    const r=await fetch('/api/keywords?keyword='+encodeURIComponent(keyword),{signal:AbortSignal.timeout(10000)});
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 10000);
+    const r=await fetch('/api/keywords?keyword='+encodeURIComponent(keyword),{signal:controller.signal});
+    clearTimeout(tid);
     if(r.ok){const d=await r.json();if(d.keywords?.length>=2)return d.keywords;}
   } catch(e){}
   try {const k=await fetchViaProxy(keyword);if(k.length>=2)return wrapStrings(k);} catch(e){}
@@ -140,7 +147,10 @@ async function fetchNaverKeywords(keyword) {
 // ── DataLab 추이 API ─────────────────────────────────
 async function fetchTrend(keyword) {
   try {
-    const r=await fetch('/api/trend?keyword='+encodeURIComponent(keyword),{signal:AbortSignal.timeout(12000)});
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 12000);
+    const r=await fetch('/api/trend?keyword='+encodeURIComponent(keyword),{signal:controller.signal});
+    clearTimeout(tid);
     if(r.ok) return r.json();
   } catch(e){}
   return null;
@@ -1034,10 +1044,11 @@ async function startSearch(keyword) {
 
     // 전수 BFS 수집
     await collectAll(keyword, rootId, firstLevel);
+    console.log('Step 2: Collection Complete, Nodes:', nodes.length);
 
     // 데이터 준비 완료 → 결과 화면 전환
-    setLoading(false);
     if(isFirst) showResults();
+    console.log('Step 3: UI Transitioned');
 
     // 줌 리셋 + 실제 SVG 크기로 루트 좌표 업데이트
     svg.call(zoom.transform, d3.zoomIdentity);
@@ -1058,10 +1069,11 @@ async function startSearch(keyword) {
       showToast('연관 검색어를 찾지 못했습니다. 다른 키워드를 시도해보세요.');
     }
   } catch(e) {
-    console.error(e);
-    showToast('오류가 발생했습니다. 다시 시도해주세요.');
-    setLoading(false);
+    console.error('SEARCH ERROR:', e);
+    showToast('오류가 발생했습니다: ' + e.message);
     if(isFirst) showResults();
+  } finally {
+    setLoading(false);
   }
 }
 
@@ -1082,12 +1094,18 @@ document.getElementById('headerBtn').addEventListener('click',()=>{
 document.getElementById('headerInput').addEventListener('keydown',e=>{
   if(e.key==='Enter'){const kw=e.target.value.trim();if(kw){document.getElementById('searchInput').value=kw;startSearch(kw);}}
 });
-const copyTrendBtn=document.getElementById('copy-trend-btn');
-if(copyTrendBtn) copyTrendBtn.addEventListener('click',copyTrendData);
 const dlBtn=document.getElementById('download-btn');
+
+function downloadExcel() {
+  showToast('준비 중인 기능입니다');
+}
+
+if(copyTrendBtn) copyTrendBtn.addEventListener('click',copyTrendData);
 if(dlBtn) dlBtn.addEventListener('click',downloadExcel);
+
 window.addEventListener('resize',()=>{
   const el=document.getElementById('graph');
+  if(!el || !simulation) return;
   simulation.force('center',d3.forceCenter(el.clientWidth/2,el.clientHeight/2)).alpha(0.1).restart();
 });
 svg.call(zoom.transform,d3.zoomIdentity);
@@ -1097,6 +1115,7 @@ renderGenderAge(null);
 window.toggleFullscreen = function() {
   const outer = document.querySelector('.mindmap-outer');
   const fsBtn = document.getElementById('fs-btn');
+  if(!outer) return;
   if(outer.classList.contains('fullscreen-mode')) {
     outer.classList.remove('fullscreen-mode');
     if(fsBtn) fsBtn.textContent = '전체화면 ⛶';
@@ -1104,6 +1123,6 @@ window.toggleFullscreen = function() {
     outer.classList.add('fullscreen-mode');
     if(fsBtn) fsBtn.textContent = '기본화면 ✖';
   }
-  // css 변경 후 레이아웃 재계산을 위해 리사이즈 이벤트를 발생시킵니다.
-  setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+  // css 변경 후 레이아웃 재계산을 위해 리사이즈 이벤트는 짧은 지연 후 발생
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 100);
 };
