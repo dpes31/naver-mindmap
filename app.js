@@ -571,14 +571,19 @@ function nodeTextColor(d) {
 function updateGraph() {
   const el=document.getElementById('graph');
   const W=el.clientWidth||800, H=el.clientHeight||600;
+  const CX=W/2, CY=H/2;
 
-  // 반경: 카테고리별 영역(240px)이 서로 절대 중첩되지 않도록 허브 중심 거리를 충분히 확장 (850px)
-  const hubR  = 850; 
+  // ── PPT 레이아웃 수치 정의 (회장님 설계 반영) ─────────────────
+  const R_SUB      = 180;  // 1차 서브 노드 링 반경 (중앙 근처)
+  const R_HUB      = 800;  // 1차 핵심 허브 오각형 반경 (외곽)
+  const R_ORBIT2   = 90;   // 2차 노드 궤도 반경 (허브 중심)
+  const R_ORBIT3   = 175;  // 3차 노드 궤도 반경 (허브 중심)
+  // ────────────────────────────────────────────────────────────
 
   const nHubs = currentClusters.length || MAX_HUB;
-  // 정오각형(Pentagonal) 고정 배치: 360/5 = 72도 간격
   const hubAngles = Array.from({length:nHubs}, (_,i)=>(i/nHubs)*2*Math.PI - Math.PI/2);
 
+  // 1. 계층별 그룹화 (최적 배치를 위한 인덱싱)
   const memberMap={};
   nodes.forEach(n=>{
     if(n.depth<2||n.hubIdx==null) return;
@@ -586,98 +591,60 @@ function updateGraph() {
     if(!memberMap[key]) memberMap[key]=[];
     memberMap[key].push(n.id);
   });
-  function angleOffset(n) {
-    const key=`${n.hubIdx}-${n.depth}`;
-    const ms=memberMap[key]||[];
-    const idx=ms.indexOf(n.id), cnt=ms.length;
-    // 360도 전 방향으로 골고루 분산 배치
-    return (idx / cnt) * 2 * Math.PI;
-  }
 
   const nonHubs = nodes.filter(n => n.depth === 1 && !n.isHub);
-  const innerAngles = {};
-  // 1차 서브 키워드: 중앙 루트 주변에 방사형(Radial)으로 고르게 배치
-  nonHubs.forEach((n, i) => { innerAngles[n.id] = (i / nonHubs.length) * 2 * Math.PI; });
-
-  // 1차 핵심(Hubs) 좌표 고정 (fx, fy) — 물리 시뮬레이션에서 이탈 방지
+  
+  // 2. 모든 노드의 좌표를 기하학적으로 계산하여 "박제(fx, fy)"
   nodes.forEach(n => {
+    // 중앙 루트
+    if (n.depth === 0) { n.fx = CX; n.fy = CY; return; }
+
+    // 1차 서브 (중앙 링 배치)
+    if (n.depth === 1 && !n.isHub) {
+      const idx = nonHubs.indexOf(n);
+      const ang = (idx / (nonHubs.length || 1)) * 2 * Math.PI;
+      n.fx = CX + Math.cos(ang) * R_SUB;
+      n.fy = CY + Math.sin(ang) * R_SUB;
+      return;
+    }
+
+    // 1차 핵심 (오각형 허브 배치)
     if (n.isHub && n.hubIdx != null) {
-      n.fx = W/2 + Math.cos(hubAngles[n.hubIdx]) * hubR;
-      n.fy = H/2 + Math.sin(hubAngles[n.hubIdx]) * hubR;
+      n.fx = CX + Math.cos(hubAngles[n.hubIdx]) * R_HUB;
+      n.fy = CY + Math.sin(hubAngles[n.hubIdx]) * R_HUB;
+      return;
+    }
+
+    // 2차, 3차 (허브 주변 동심원 궤도 배치)
+    if (n.hubIdx != null) {
+      const parentAngle = hubAngles[n.hubIdx];
+      const hx = CX + Math.cos(parentAngle) * R_HUB;
+      const hy = CY + Math.sin(parentAngle) * R_HUB;
+      
+      const key = `${n.hubIdx}-${n.depth}`;
+      const ms = memberMap[key] || [];
+      const idx = ms.indexOf(n.id);
+      const cnt = ms.length || 1;
+      
+      const localR = (n.depth === 2) ? R_ORBIT2 : R_ORBIT3;
+      // 궤도 내에서 겹치지 않게 360도 분산
+      const ang = (idx / cnt) * 2 * Math.PI;
+      
+      n.fx = hx + Math.cos(ang) * localR;
+      n.fy = hy + Math.sin(ang) * localR;
     }
   });
 
-  function tx(n) {
-    if(n.depth===0) return W/2;
-    // 1차 핵심(Hubs): 고정된 오각형 정점에 배치
-    if(n.isHub) return W/2 + Math.cos(hubAngles[n.hubIdx])*hubR;
-    // 1차 서브: 중앙 노드 주변 근거리에 방사형 배치
-    if(n.depth===1) return W/2 + Math.cos(innerAngles[n.id]) * (hubR * 0.3);
-    if(n.hubIdx==null) return W/2;
-    
-    // 2~3차: 부모 허브를 중심으로 하는 동심원(Concentric Orbits) 배치
-    const hub = nodes.find(h => h.isHub && h.hubIdx === n.hubIdx);
-    const hx = (hub && hub.x != null && !isNaN(hub.x)) ? hub.x : (W/2 + Math.cos(hubAngles[n.hubIdx])*hubR);
-    const localR = n.depth===2 ? 90 : 170; // 1차핵심 주변 90px(2차), 그 너머 170px(3차)
-    const ang = angleOffset(n);
-    return hx + Math.cos(ang) * localR;
-  }
-  function ty(n) {
-    if(n.depth===0) return H/2;
-    if(n.isHub) return H/2 + Math.sin(hubAngles[n.hubIdx])*hubR;
-    if(n.depth===1) return H/2 + Math.sin(innerAngles[n.id]) * (hubR * 0.3);
-    if(n.hubIdx==null) return H/2;
-    
-    const hub = nodes.find(h => h.isHub && h.hubIdx === n.hubIdx);
-    const hy = (hub && hub.y != null && !isNaN(hub.y)) ? hub.y : (H/2 + Math.sin(hubAngles[n.hubIdx])*hubR);
-    const localR = n.depth===2 ? 90 : 170;
-    const ang = angleOffset(n);
-    return hy + Math.sin(ang) * localR;
-  }
-  function forceStr(n) {
-    if(n.depth===0) return 0.8;
-    if(n.isHub)     return 1.1; // 허브는 강력하게 고정
-    if(n.depth===1) return 0.9;
-    if(n.depth===2) return 1.2; // 2,3차는 동심원 궤도에 강하게 부착
-    if(n.depth===3) return 1.2; 
-    return 0;
-  }
-
-  // ── 클러스터 내 구속 물리 엔진 (Containment Force) ─────────────────────
-  // 각 2차, 3차 노드가 자신의 부모 허브(Halo)를 벗어나지 못하도록 물리적으로 강제함
-  function clusterContainmentForce(alpha) {
-    const haloR = 240; 
-    const margin = 20; // 30 -> 20으로 안쪽 공간 확보 최적화
-    nodes.forEach(n => {
-      if (n.depth < 2 || n.hubIdx == null) return;
-      const hub = nodes.find(h => h.isHub && h.hubIdx === n.hubIdx);
-      if (!hub || hub.x == null) return;
-      
-      const dx = n.x - hub.x;
-      const dy = n.y - hub.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const maxD = haloR - margin;
-
-      if (dist > maxD) {
-        const ratio = maxD / dist;
-        // 위치 강제 보정 및 속도 무효화 (튕겨나가는 현상 방지)
-        n.x = hub.x + dx * ratio;
-        n.y = hub.y + dy * ratio;
-        n.vx = 0;
-        n.vy = 0;
-      }
-    });
-  }
+  // 이제 모든 노드에 fx, fy가 들어갔으므로 시뮬레이션은 최소한의 조정만 수행함
+  function forceStr(n) { return 1.0; }
 
   simulation
-    .force('clusterX', d3.forceX(tx).strength(forceStr))
-    .force('clusterY', d3.forceY(ty).strength(forceStr))
-    .force('containment', clusterContainmentForce)
-    // 반발력을 노드 중요도(depth)에 따라 최적화 (2,3차 노드들이 밀려나지 않게 조정)
-    .force('charge', d3.forceManyBody().strength(d => d.depth === 0 ? -120 : d.isHub ? -100 : -25).distanceMax(250))
-    .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + (d.depth === 3 ? 12 : 16)).strength(0.8))
-    .force('center', d3.forceCenter(W/2, H/2))
-    .force('radial', null);
+    .force('x', d3.forceX().x(d => d.fx).strength(1.2))
+    .force('y', d3.forceY().y(d => d.fy).strength(1.2))
+    .force('containment', null) // 이제 fx, fy로 직접 제어하므로 containment는 보조 역할만 하거나 제거 가능
+    .force('charge', d3.forceManyBody().strength(-30))
+    .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + 12).strength(1))
+    .alpha(1).alphaTarget(0).restart();
 
   // 링크 (강도 상위 MAX_LINKS_SHOW개)
   const shownLinks=[...links].sort((a,b)=>(b.strength||0)-(a.strength||0)).slice(0,MAX_LINKS_SHOW);
@@ -1122,13 +1089,26 @@ window.toggleFullscreen = function() {
   const outer = document.querySelector('.mindmap-outer');
   const fsBtn = document.getElementById('fs-btn');
   if(!outer) return;
-  if(outer.classList.contains('fullscreen-mode')) {
-    outer.classList.remove('fullscreen-mode');
-    if(fsBtn) fsBtn.textContent = '전체화면 ⛶';
+
+  if(!document.fullscreenElement) {
+    outer.requestFullscreen().catch(err => {
+      // 브라우저 샌드박스 등의 이유로 거부될 시 기존 클래스 방식 토글
+      outer.classList.toggle('fullscreen-mode');
+    });
   } else {
-    outer.classList.add('fullscreen-mode');
-    if(fsBtn) fsBtn.textContent = '기본화면 ✖';
+    document.exitFullscreen();
   }
-  // css 변경 후 레이아웃 재계산을 위해 리사이즈 이벤트는 짧은 지연 후 발생
-  setTimeout(() => window.dispatchEvent(new Event('resize')), 100);
 };
+
+document.addEventListener('fullscreenchange', () => {
+  const outer = document.querySelector('.mindmap-outer');
+  const fsBtn = document.getElementById('fs-btn');
+  if (document.fullscreenElement) {
+    if(outer) outer.classList.add('fullscreen-mode');
+    if(fsBtn) fsBtn.textContent = '기본화면 ✖';
+  } else {
+    if(outer) outer.classList.remove('fullscreen-mode');
+    if(fsBtn) fsBtn.textContent = '전체화면 ⛶';
+  }
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 200);
+});
