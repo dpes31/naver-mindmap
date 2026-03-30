@@ -360,15 +360,14 @@ header.hidden { display: none; }
   overflow: hidden;
 }
 .mindmap-header {
-  position: sticky; top: 0; z-index: 20;
-  padding: 10px 18px;
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  background: rgba(255,255,255,0.82);
-  backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
-  border-bottom: 1px solid var(--border2);
-  flex-shrink: 0;
+  position: absolute; top: 0; left: 0; right: 0; 
+  padding: 14px 20px; display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid rgba(0,0,0,0.03); background: rgba(255,255,255,0.7);
+  backdrop-filter: blur(8px); z-index: 1000;
+  border-top-left-radius: 16px; border-top-right-radius: 16px;
+  pointer-events: none; /* 헤더 자체는 통과, 버튼만 클릭 가능하게 */
 }
+.mindmap-header * { pointer-events: auto; }
 .mm-download-btn {
   margin-left: auto; flex-shrink: 0;
   padding: 5px 12px; font-size: 11px; font-weight: 600;
@@ -381,13 +380,16 @@ header.hidden { display: none; }
 
 .mm-fs-btn {
   margin-left: 8px; flex-shrink: 0;
-  padding: 5px 12px; font-size: 11px; font-weight: 600;
-  border: 1.5px solid rgba(16, 185, 129, 0.2); border-radius: 8px;
-  background: rgba(16, 185, 129, 0.07); color: #10B981;
-  cursor: pointer; transition: background 0.15s, border-color 0.15s;
+  padding: 8px 16px; font-size: 11px; font-weight: 700;
+  border: 2px solid #10B981; border-radius: 8px;
+  background: #fff; color: #10B981;
+  cursor: pointer; transition: all 0.2s;
   white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+  z-index: 999999 !important; /* 무조건 최상단 */
+  position: relative;
 }
-.mm-fs-btn:hover { background: #10B981; color: #fff; border-color: #10B981; }
+.mm-fs-btn:hover { background: #10B981; color: #fff; transform: translateY(-2px); }
 
 .mindmap-outer.fullscreen-mode {
   position: fixed !important; 
