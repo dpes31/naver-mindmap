@@ -575,9 +575,9 @@ function updateGraph() {
 
   // ── PPT 레이아웃 수치 정의 (4분면 X자 방사형 버전 - 공간 꽉 채우기) ───────────
   const R_SUB      = 120;  // 중앙 서브 밀착 유지
-  const R_HUB      = 550;  // 4개 집단이 화면 모서리 방향으로 시원하게 퍼짐
-  const R_ORBIT2   = 135;  // 115 -> 135 (집단 내부 1차 확장)
-  const R_ORBIT3   = 220;  // 205 -> 220 (집단 내부 2차 확장 - 꽉 참)
+  const R_HUB      = 650;  // 550 -> 650 (집단 간 겹침 방지를 위해 시원하게 확장)
+  const R_ORBIT2   = 135;
+  const R_ORBIT3   = 220;
   // ────────────────────────────────────────────────────────────
 
   const nHubs = 4; // 4개로 고정
@@ -634,10 +634,11 @@ function updateGraph() {
   function forceStr(n) { return 1.0; }
 
   simulation
-    .force('x', d3.forceX(d => d.targetX || d.x).strength(0.8))
-    .force('y', d3.forceY(d => d.targetY || d.y).strength(0.8))
-    .force('charge', d3.forceManyBody().strength(-35))
-    .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + 14).strength(1))
+    .force('center', d3.forceCenter(CX, CY)) // 화면 중앙에 지도를 강력하게 못 박음
+    .force('x', d3.forceX(d => d.targetX || d.x).strength(1.2)) // 회귀 본능 강화
+    .force('y', d3.forceY(d => d.targetY || d.y).strength(1.2)) // 회귀 본능 강화
+    .force('charge', d3.forceManyBody().strength(-200)) // 척력을 대폭 높여 겹침 방지
+    .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + 16).strength(1))
     .alpha(1).restart();
 
   // 링크 (강도 상위 MAX_LINKS_SHOW개)
