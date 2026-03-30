@@ -253,14 +253,14 @@ header.hidden { display: none; }
 
 .kw-card {
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px; padding: 14px 16px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.02);
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  border: none;
+  border-radius: 16px; padding: 16px 20px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s;
 }
 .kw-card:hover { 
   transform: translateY(-2px);
-  box-shadow: 0 12px 24px -4px rgba(0,0,0,0.06); 
+  box-shadow: 0 12px 24px rgba(0,0,0,0.08); 
 }
 
 .card-title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
@@ -299,13 +299,13 @@ header.hidden { display: none; }
 }
 .ga-card {
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r); padding: 22px 24px;
+  border: none;
+  border-radius: var(--r); padding: 28px;
   box-shadow: var(--shadow);
-  transition: all 0.3s ease;
+  transition: transform 0.3s ease, box-shadow 0.3s;
 }
-.ga-card:hover { box-shadow: var(--shadow2); transform: translateY(-1px); }
-.ga-title { font-size: 20px; font-weight: 700; color: var(--accent); letter-spacing: -0.5px; margin-bottom: 14px; }
+.ga-card:hover { box-shadow: var(--shadow2); transform: translateY(-2px); }
+.ga-title { font-size: 18px; font-weight: 700; color: #6366f1; letter-spacing: -0.5px; margin-bottom: 20px; }
 .ga-placeholder { font-size: 12px; color: #9ca3af; text-align: center; padding: 12px 0; border: 1.5px dashed #d1d5db; border-radius: 8px; line-height: 1.6; }
 
 /* 성별 바 */
