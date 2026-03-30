@@ -573,11 +573,11 @@ function updateGraph() {
   const W=el.clientWidth||800, H=el.clientHeight||600;
   const CX=W/2, CY=H/2;
 
-  // ── PPT 레이아웃 수치 정의 (4분면 X자 방사형 버전 - 공간 꽉 채우기) ───────────
-  const R_SUB      = 120;  // 중앙 서브 밀착 유지
-  const R_HUB      = 650;  // 550 -> 650 (집단 간 겹침 방지를 위해 시원하게 확장)
-  const R_ORBIT2   = 135;
-  const R_ORBIT3   = 220;
+  // ── PPT 레이아웃 수항 정의 (회장님 전용 응축형 4분면 버전) ───────────
+  const R_SUB      = 120;  // 중앙 서브 밀착
+  const R_HUB      = 600;  // 650 -> 600 (중앙에서 너무 멀어지지 않게 조정)
+  const R_ORBIT2   = 85;   // 135 -> 85 (집단 내부 꽉 차게 응축)
+  const R_ORBIT3   = 155;  // 220 -> 155 (집단 내부 꽉 차게 응축)
   // ────────────────────────────────────────────────────────────
 
   const nHubs = 4; // 4개로 고정
@@ -635,10 +635,10 @@ function updateGraph() {
 
   simulation
     .force('center', d3.forceCenter(CX, CY)) // 화면 중앙에 지도를 강력하게 못 박음
-    .force('x', d3.forceX(d => d.targetX || d.x).strength(1.2)) // 회귀 본능 강화
-    .force('y', d3.forceY(d => d.targetY || d.y).strength(1.2)) // 회귀 본능 강화
-    .force('charge', d3.forceManyBody().strength(-200)) // 척력을 대폭 높여 겹침 방지
-    .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + 16).strength(1))
+    .force('x', d3.forceX(d => d.targetX || d.x).strength(1.5)) // 회귀 본능 최고조
+    .force('y', d3.forceY(d => d.targetY || d.y).strength(1.5)) // 회귀 본능 최고조
+    .force('charge', d3.forceManyBody().strength(-150)) // 집단 간 적절한 간격 유지
+    .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + 12).strength(1))
     .alpha(1).restart();
 
   // 링크 (강도 상위 MAX_LINKS_SHOW개)
@@ -777,7 +777,7 @@ function renderHalos() {
     d3.select(this).select('.ch-fill')
       .attr('cx', hub.x)
       .attr('cy', hub.y)
-      .attr('r', 280) // 240 -> 280 (노드들이 꽉 차 보이도록 배경 원 확장)
+      .attr('r', 210) // 280 -> 210 (응축된 노드 규격에 맞춰 원 축소, 꽉 찬 느낌)
       .attr('fill', color).attr('fill-opacity', 0.05)
       .attr('stroke', color).attr('stroke-width', 2)
       .attr('stroke-dasharray', '8,4')
@@ -931,7 +931,8 @@ async function collectAll(rootKeyword, rootId, firstLevel) {
       }
     });
   });
-  updateProgress(100, '데이터 수집 완료');
+  updateProgress(95, '마인드맵 최종 렌더링 중 (95%)...');
+  updateProgress(100, '데이터 시각화 완료');
 }
 
 function updateLegend(keyword) {
