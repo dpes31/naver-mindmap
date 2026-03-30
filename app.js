@@ -597,8 +597,10 @@ function updateGraph() {
   
   // 2. 모든 노드의 좌표를 기하학적으로 계산하여 "박제(fx, fy)"
   nodes.forEach(n => {
-    if (n.depth === 0) { n.fx = CX; n.fy = CY; return; }
-    n.fx = null; n.fy = null;
+    if (n.depth === 0) { 
+      n.fx = CX; n.fy = CY; // 루트는 무조건 배꼽 중앙 박제
+      return; 
+    }
 
     if (n.depth === 1 && !n.isHub) {
       const idx = nonHubs.indexOf(n);
@@ -609,13 +611,16 @@ function updateGraph() {
     }
 
     if (n.isHub && n.hubIdx != null) {
-      n.targetX = CX + Math.cos(hubAngles[n.hubIdx % 4]) * R_HUB;
-      n.targetY = CY + Math.sin(hubAngles[n.hubIdx % 4]) * R_HUB;
+      const hIdx = n.hubIdx % 4;
+      n.fx = CX + Math.cos(hubAngles[hIdx]) * R_HUB; // 시뮬레이션 힘 무시하고 고정
+      n.fy = CY + Math.sin(hubAngles[hIdx]) * R_HUB; // 시뮬레이션 힘 무시하고 고정
+      n.targetX = n.fx; n.targetY = n.fy;
       return;
     }
 
     if (n.hubIdx != null) {
       const hIdx = n.hubIdx % 4;
+      // 허브 고정 좌표를 기준으로 자녀들 좌표 계산
       const hx = CX + Math.cos(hubAngles[hIdx]) * R_HUB;
       const hy = CY + Math.sin(hubAngles[hIdx]) * R_HUB;
       const key = `${n.hubIdx}-${n.depth}`;
