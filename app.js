@@ -19,6 +19,41 @@ const MAX_LINKS_SHOW = 60;
 const MAX_DEPTH      = 3;
 let currentClusters  = [];
 let currentKeyword   = '';
+function setLoading(v, msg) {
+  isLoading = !!v;
+  const pwrap = document.querySelector('.progress-wrap');
+  const pbar = document.getElementById('progress-bar');
+  const pt = document.getElementById('loading-progress');
+  
+  const searchBtn = document.getElementById('searchBtn');
+  const headerBtn = document.getElementById('headerBtn');
+  if (searchBtn) searchBtn.disabled = v;
+  if (headerBtn) headerBtn.disabled = v;
+
+  if (v) {
+    if(pwrap) pwrap.style.display = 'block';
+    if(pbar) {
+      pbar.style.width = '0%';
+      setTimeout(() => { pbar.style.width = '100%'; }, 50);
+    }
+    if(pt) pt.innerText = msg || '수집 중...';
+  } else {
+    if(pwrap) pwrap.style.display = 'none';
+    if(pt) pt.innerText = '';
+  }
+}
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  if(!el) return;
+  el.innerText = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+
+
+
 
 // ── Naver Search Ads API (키워드 + 검색량) ──────────
 
@@ -724,6 +759,137 @@ function renderHalos() {
       .attr('stroke-dasharray', '8,4')
       .attr('stroke-opacity', 0.8)
       .style('filter', 'drop-shadow(0 4px 12px rgba(0,0,0,0.03))');
+  });
+}
+
+// ── 인터랙션 (Hover, Click, Tooltip) ─────────────────────
+function onHover(e, d) {
+  if (window.innerWidth <= 768) return;
+  d3.select(this).style('opacity', 0.8);
+}
+
+function onLeave(e, d) {
+  if (window.innerWidth <= 768) return;
+  d3.select(this).style('opacity', 1);
+}
+
+function onClick(e, d) {
+  e.stopPropagation();
+  if (window.innerWidth <= 768) return;
+  showInfoCard(d);
+}
+
+function showInfoCard(d) {
+  if (!tooltipEl || window.innerWidth <= 768) return;
+  
+  const title = document.getElementById('info-title');
+  const type  = document.getElementById('info-type');
+  const pc    = document.getElementById('info-pc');
+  const mo    = document.getElementById('info-mo');
+  const tot   = document.getElementById('info-tot');
+  
+  if(title) title.innerText = d.label;
+  if(type) type.innerText = d.depth === 0 ? '핵심 키워드' : d.isHub ? '1차 핵심 그룹' : d.depth + '차 연관 키워드';
+  if(pc) pc.innerText = d.pcVol?.toLocaleString() || '0';
+  if(mo) mo.innerText = d.mobileVol?.toLocaleString() || '0';
+  if(tot) tot.innerText = d.totalVol?.toLocaleString() || '0';
+  
+  tooltipEl.classList.add('visible');
+
+  const rect = tooltipEl.getBoundingClientRect();
+  const graphEl = document.querySelector('.mindmap-outer') || document.body;
+  const bound = graphEl.getBoundingClientRect();
+  
+  // D3 zoom transform 적용
+  const transform = d3.zoomTransform(svg.node());
+  let realX = transform.applyX(d.x) + 20;
+  let realY = transform.applyY(d.y) + 20;
+  
+  // 패널이 우측 화면 이탈 시 좌로 이동
+  if (realX + rect.width > bound.width - 20) {
+      realX = transform.applyX(d.x) - rect.width - 20;
+  }
+  // 패널이 하단 화면 이탈 시 위로 이동
+  if (realY + rect.height > bound.height - 20) {
+      realY = transform.applyY(d.y) - rect.height - 20;
+  }
+  
+  // 최소 여백 강제 보정
+  realX = Math.max(10, Math.min(realX, bound.width - rect.width - 10));
+  realY = Math.max(10, Math.min(realY, bound.height - rect.height - 10));
+
+  tooltipEl.style.left = realX + 'px';
+  tooltipEl.style.top = realY + 'px';
+}
+
+svg.on('click', () => {
+  if(tooltipEl) tooltipEl.classList.remove('visible');
+});
+
+async function collectAll(rootKeyword, rootId, firstLevel) {
+  // 1차 배열 중 검색량 0인 것 필터
+  const validLevel = firstLevel.filter(d => d.totalVol > 0);
+  
+  const hubs = validLevel.slice(0, MAX_HUB);
+  currentClusters = hubs; 
+  
+  hubs.forEach((h, i) => {
+    const id = h.keyword.toLowerCase();
+    if (!nodeIds.has(id)) {
+      nodeIds.add(id);
+      nodes.push({ ...h, id, label: h.keyword, depth: 1, isHub: true, hubIdx: i });
+      links.push({ source: rootId, target: id, strength: h.totalVol || 1 });
+    }
+  });
+
+  const nonHubs = validLevel.slice(MAX_HUB, MAX_HUB + MAX_D1);
+  nonHubs.forEach(h => {
+    const id = h.keyword.toLowerCase();
+    if (!nodeIds.has(id)) {
+      nodeIds.add(id);
+      nodes.push({ ...h, id, label: h.keyword, depth: 1, isHub: false });
+      links.push({ source: rootId, target: id, strength: h.totalVol || 1 });
+    }
+  });
+
+  const d2Promises = hubs.map(async (hub, idx) => {
+    const arr = await fetchNaverKeywords(hub.keyword);
+    // 허브 자신과 메인키워드 배제
+    const filtered = arr.filter(x => x.keyword.toLowerCase() !== hub.keyword.toLowerCase() && x.keyword.toLowerCase() !== rootId && x.totalVol > 0);
+    return { hubId: hub.keyword.toLowerCase(), hubIdx: idx, list: filtered.slice(0, MAX_D2_PER) };
+  });
+
+  const d2Results = await Promise.all(d2Promises);
+  const d3Candidates = [];
+
+  d2Results.forEach(res => {
+    res.list.forEach(k2 => {
+      const id2 = k2.keyword.toLowerCase();
+      if (!nodeIds.has(id2)) {
+        nodeIds.add(id2);
+        nodes.push({ ...k2, id: id2, label: k2.keyword, depth: 2, isHub: false, hubIdx: res.hubIdx });
+        links.push({ source: res.hubId, target: id2, strength: k2.totalVol || 1 });
+        d3Candidates.push({ keyword: k2.keyword, id: id2, hubIdx: res.hubIdx });
+      }
+    });
+  });
+
+  const d3Promises = d3Candidates.map(async (cand) => {
+    const arr = await fetchNaverKeywords(cand.keyword);
+    const filtered = arr.filter(x => !nodeIds.has(x.keyword.toLowerCase()) && x.keyword.toLowerCase() !== rootId && x.totalVol > 0);
+    return { parentId: cand.id, hubIdx: cand.hubIdx, list: filtered.slice(0, MAX_D3_PER) };
+  });
+
+  const d3Results = await Promise.all(d3Promises);
+  d3Results.forEach(res => {
+    res.list.forEach(k3 => {
+      const id3 = k3.keyword.toLowerCase();
+      if (!nodeIds.has(id3)) {
+        nodeIds.add(id3);
+        nodes.push({ ...k3, id: id3, label: k3.keyword, depth: 3, isHub: false, hubIdx: res.hubIdx });
+        links.push({ source: res.parentId, target: id3, strength: k3.totalVol || 1 });
+      }
+    });
   });
 }
 
