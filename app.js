@@ -1,11 +1,10 @@
 const ROOT_COLOR     = '#4F46E5';   // Apple System Indigo
 // 카테고리 halo 배경 색
-const CLUSTER_COLORS = ['#6366F1','#10B981','#F97316','#8B5CF6','#EC4899']; // Indigo, Emerald, Orange, Purple, Pink
+const CLUSTER_COLORS = ['#6366F1','#10B981','#F97316','#06B6D4','#EC4899']; // Indigo, Emerald, Orange, Cyan, Pink
 // 노드 fill 색 (역할별)
-const HUB_COLOR      = '#10B981';   // Emerald (허브) 1차 핵심 연관 공통 컬러
-const NON_HUB_COLOR  = '#E2E8F0';   // Light Gray (1차 서브 연관 - 투명하게, 강조 안함)
+const NON_HUB_COLOR  = '#86EFAC';   // Light Green (1차 서브 연관 - 사용자 요청 반영)
 const D2_COLOR       = '#FBBF24';   // Amber (2차)
-const D3_COLOR       = '#CBD5E1';   // Slate 300 (3차)
+const D3_COLOR       = '#E2E8F0';   // Light Gray (3차 - 시각적 구분 명확화)
 
 // 레전드용
 const DEPTH_COLORS   = [ROOT_COLOR, HUB_COLOR, D2_COLOR, D3_COLOR];
@@ -352,27 +351,49 @@ function nodeRadius(d) {
 
 function linkWidth(d) {
   const t=nodes.find(n=>n.id===(d.target?.id||d.target));
-  if (!t) return 1;
-  if (t.isHub)     return 2.2;
-  if (t.depth===1) return 1.0;
-  if (t.depth===2) return 1.5;
-  if (t.depth===3) return 0.8;
-  return 1;
+  if (!t) return 1.5;
+  if (t.isHub)     return 4.0; // 허브 연결선은 매우 굵고 확실하게
+  if (t.depth===1) return 3.0;
+  if (t.depth===2) return 2.2;
+  if (t.depth===3) return 1.5;
+  return 1.5;
 }
 
 function hexToRgba(hex, a) {
   const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
   return `rgba(${r},${g},${b},${a})`;
 }
-// 링크 색: 노드 역할 기반
+// ── 클러스터 헐(hull) 패스 — Catmull-Rom 스무스 곡선 알고리즘 적용 (찌그러짐 방지) ────
+function smoothHull(pts, pad) {
+  if(!pts||pts.length<3) {
+    if(!pts.length) return '';
+    const [px,py]=pts[0];
+    return `M${px-pad},${py} A${pad},${pad} 0 1,0 ${px+pad},${py} A${pad},${pad} 0 1,0 ${px-pad},${py}`;
+  }
+  const hull=d3.polygonHull(pts);
+  if(!hull) return '';
+  // 폴리곤 중심점 계산
+  const cx = d3.mean(hull, p=>p[0]);
+  const cy = d3.mean(hull, p=>p[1]);
+  // 중심에서 바깥쪽으로 pad만큼 팽창(Expand)시킨 포인트 배열 생성
+  const expanded = hull.map(p => {
+    const dx = p[0] - cx, dy = p[1] - cy;
+    const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+    return [p[0] + (dx/dist)*pad, p[1] + (dy/dist)*pad];
+  });
+  // CatmullRomClosed로 모든 각이 매끄러운 완벽한 유선형 아메바 형태 렌더링
+  return d3.line().curve(d3.curveCatmullRomClosed)(expanded);
+}
+// 링크 색 및 투명도 상향 (선이 명확히 보이도록)
 function linkColor(d) {
   const t=nodes.find(n=>n.id===(d.target?.id||d.target));
-  if (!t) return 'rgba(148,163,184,0.20)';
-  if (t.isHub)     return hexToRgba(HUB_COLOR, 0.40);
-  if (t.depth===1) return 'rgba(134,239,172,0.35)';
-  if (t.depth===2) return hexToRgba(D2_COLOR, 0.35);
-  if (t.depth===3) return hexToRgba(D3_COLOR, 0.28);
-  return 'rgba(148,163,184,0.20)';
+  if (!t) return 'rgba(148,163,184,0.4)';
+  // 허브 선은 카테고리 색상
+  if (t.isHub)     return hexToRgba(CLUSTER_COLORS[(t.hubIdx||0)%CLUSTER_COLORS.length], 0.7);
+  if (t.depth===1) return hexToRgba(NON_HUB_COLOR, 0.8);
+  if (t.depth===2) return hexToRgba(D2_COLOR, 0.6);
+  if (t.depth===3) return hexToRgba(D3_COLOR, 0.6);
+  return 'rgba(148,163,184,0.4)';
 }
 
 // ── 연관성 점수 (API 순위 × 검색량) ─────────────────────
@@ -383,39 +404,6 @@ function relevanceScore(item, idx) {
 }
 
 // currentClusters는 collectAll 내에서 직접 생성 (buildHubClusters 제거)
-
-// ── 클러스터 헐(hull) 패스 — 부드러운 곡선 ────────────────
-function hullPath(pts, pad) {
-  if(!pts.length) return '';
-  if(pts.length===1){
-    const [px,py]=pts[0];
-    return `M${px-pad},${py} A${pad},${pad} 0 1,0 ${px+pad},${py} A${pad},${pad} 0 1,0 ${px-pad},${py}`;
-  }
-  const hull=d3.polygonHull(pts.map(p=>[p[0],p[1]]));
-  if(!hull||hull.length<3){
-    const cx=d3.mean(pts,p=>p[0]),cy=d3.mean(pts,p=>p[1]);
-    const rx=Math.max(pad*1.5,d3.max(pts,p=>Math.abs(p[0]-cx))+pad);
-    const ry=Math.max(pad,d3.max(pts,p=>Math.abs(p[1]-cy))+pad);
-    return `M${cx-rx},${cy} A${rx},${ry} 0 1,0 ${cx+rx},${cy} A${rx},${ry} 0 1,0 ${cx-rx},${cy}`;
-  }
-  const [hcx,hcy]=d3.polygonCentroid(hull);
-  const exp=hull.map(([px,py])=>{
-    const dx=px-hcx, dy=py-hcy, dist=Math.hypot(dx,dy)||1;
-    return [(px+dx/dist*pad), (py+dy/dist*pad)];
-  });
-  // Catmull-Rom → cubic bezier (closed smooth curve)
-  const n=exp.length, t=0.35;
-  let path=`M${exp[0][0].toFixed(1)},${exp[0][1].toFixed(1)}`;
-  for(let i=0;i<n;i++){
-    const p0=exp[(i-1+n)%n], p1=exp[i], p2=exp[(i+1)%n], p3=exp[(i+2)%n];
-    const cp1x=(p1[0]+(p2[0]-p0[0])*t).toFixed(1);
-    const cp1y=(p1[1]+(p2[1]-p0[1])*t).toFixed(1);
-    const cp2x=(p2[0]-(p3[0]-p1[0])*t).toFixed(1);
-    const cp2y=(p2[1]-(p3[1]-p1[1])*t).toFixed(1);
-    path+=` C${cp1x},${cp1y} ${cp2x},${cp2y} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
-  }
-  return path+' Z';
-}
 
 // ── D3 초기화 ─────────────────────────────────────────
 const svg = d3.select('#graph');
@@ -460,8 +448,18 @@ makeGradient('grad-d3', D3_COLOR, 0.80);
 DEPTH_COLORS.forEach((c,i)=>makeGradient(`grad-${i}`,c,DEPTH_OPACITY[i]));
 
 const zoomG=svg.append('g').attr('id','zoom-layer');
-const zoom=d3.zoom().scaleExtent([0.1,5]).on('zoom',e=>zoomG.attr('transform',e.transform));
-svg.call(zoom).on('dblclick.zoom',null);
+const zoom=d3.zoom()
+  .scaleExtent([0.2, 3])
+  .wheelDelta(e => -e.deltaY * (e.deltaMode === 1 ? 0.05 : e.deltaMode ? 1 : 0.001)) // 스크롤 줌 부드럽고 촘촘하게 튜닝
+  .on('zoom',e=>{
+    nodesG.attr('transform',e.transform);
+    linksG.attr('transform',e.transform);
+    halosG.attr('transform',e.transform);
+  });
+svg.call(zoom);
+
+// 초기 마인드맵 더 작게 시작하여 전체 뷰가 한 눈에 쾌적하게 잡히도록 0.7 배율 세팅
+svg.call(zoom.transform, d3.zoomIdentity.translate(W/2, H/2).scale(0.7).translate(-W/2, -H/2));
 
 const halosG=zoomG.append('g').attr('id','halos');
 const linksG=zoomG.append('g').attr('id','links');
@@ -492,10 +490,10 @@ let nodes=[],links=[];
 const nodeIds=new Set();
 let isLoading=false;
 
-// ── 노드 색상 (역할별 플랫 — 글래스모피즘) ─────────────────
+// ── 노드 색상 (역할별 플랫) ─────────────────
 function nodeFillColor(d) {
   if (d.depth===0) return ROOT_COLOR;
-  if (d.isHub)     return HUB_COLOR; // 1차 허브는 1개의 고정 색상(초록색)으로 통일
+  if (d.isHub)     return CLUSTER_COLORS[(d.hubIdx || 0) % CLUSTER_COLORS.length]; // 반드시 카테고리와 1:1 매칭
   if (d.depth===1) return NON_HUB_COLOR; 
   if (d.depth===2) return D2_COLOR;
   if (d.depth===3) return D3_COLOR;
@@ -595,8 +593,7 @@ function updateGraph() {
     .style('opacity',0).style('cursor','pointer')
     .call(d3.drag()
       .on('start',(e,d)=>{if(!e.active)simulation.alphaTarget(0.1).restart();d.fx=d.x;d.fy=d.y;tooltipEl.classList.remove('visible');})
-      .on('drag',(e,d)=>{d.fx=e.x;d.fy=e.y;
-        if(e.sourceEvent){tooltipEl.style.left=(e.sourceEvent.clientX+14)+'px';tooltipEl.style.top=(e.sourceEvent.clientY-8)+'px';}})
+      .on('drag',onDrag)
       .on('end',(e,d)=>{if(!e.active)simulation.alphaTarget(0);d.fx=null;d.fy=null;}))
     .on('mouseenter',onHover).on('mouseleave',onLeave).on('click',onClick);
 
@@ -697,12 +694,12 @@ function renderHalos() {
     ).filter(n=>n.x!=null&&!isNaN(n.x));
     if(cNodes.length<2) return;
     const pts=cNodes.map(n=>[n.x,n.y]);
-    const pad=45; // 넓은 영역 확보
+    const pad=55; // 패딩 증가 및 완벽한 부드러운 외곽선 함수 호출
     d3.select(this).select('.ch-fill')
-      .attr('d',hullPath(pts,pad))
+      .attr('d',smoothHull(pts,pad))
       .attr('fill',cluster.color).attr('fill-opacity',0.08)
       .attr('stroke',cluster.color).attr('stroke-width',2)
-      .attr('stroke-opacity',0.4)
+      .attr('stroke-opacity',0.5)
       .style('filter', 'drop-shadow(0 4px 12px rgba(0,0,0,0.03))');
   });
 }
@@ -717,6 +714,8 @@ function onHover(e,d) {
   tooltipEl.textContent=d.label;
   tooltipEl.style.left=(e.clientX+14)+'px';tooltipEl.style.top=(e.clientY-8)+'px';
   tooltipEl.classList.add('visible');
+  
+  if (typeof showInfoCard === 'function') showInfoCard(d); // 마우스 호버 시 즉시 상세 데이터 카드 표시
   // 연결된 노드/링크만 강조, 나머지 흐리게
   const connectedIds=new Set([d.id]);
   links.forEach(lk=>{
@@ -739,10 +738,10 @@ function onLeave(e,d) {
   nodesG.selectAll('g.node-group').transition().duration(200).style('opacity',1);
   linksG.selectAll('path.link-path').transition().duration(200).style('opacity',1);
 }
-function onClick(e,d) {
-  e.stopPropagation();
+// ── 개별 상세 데이터 카드 노출 로직 ──────────────────
+function showInfoCard(d) {
   if(isLoading) return;
-  const maxV = Math.max(d.pcVol, d.mobileVol, 1);
+  const maxV = Math.max(d.pcVol||0, d.mobileVol||0, 1);
   const pcPct = d.pcVol ? Math.max(2, Math.round(d.pcVol/maxV*100)) : 0;
   const moPct = d.mobileVol ? Math.max(2, Math.round(d.mobileVol/maxV*100)) : 0;
   infoPanelEl.innerHTML=`
@@ -774,6 +773,11 @@ function onClick(e,d) {
     </div>` : '<div style="font-size:12px;color:#9ca3af;padding:8px 0">검색량 데이터 없음</div>'}
     <div class="hint" onclick="window.reSearch('${d.label.replace(/'/g,"\\'")}')">이 키워드로 새 검색 →</div>`;
   infoPanelEl.classList.add('visible');
+}
+
+function onClick(e,d) {
+  e.stopPropagation();
+  showInfoCard(d);
 }
 svg.on('click',()=>infoPanelEl.classList.remove('visible'));
 document.querySelector('.mindmap-content-wrap').addEventListener('mouseleave',()=>infoPanelEl.classList.remove('visible'));
@@ -957,7 +961,7 @@ function setLoading(active,text='연관 검색어 수집 중...') {
 function updateLegend(keyword) {
   const items=[
     {label:keyword||'검색어', color:ROOT_COLOR},
-    {label:'1차 핵심 연관', color:HUB_COLOR},
+    {label:'1차 핵심 연관', color:'#10B981'}, // 예시 컬러
     {label:'1차 서브 연관', color:NON_HUB_COLOR},
     {label:'2차 연관', color:D2_COLOR},
     {label:'3차 연관', color:D3_COLOR},
