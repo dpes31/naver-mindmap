@@ -19,27 +19,30 @@ const MAX_LINKS_SHOW = 60;
 const MAX_DEPTH      = 3;
 let currentClusters  = [];
 let currentKeyword   = '';
-function setLoading(v, msg) {
-  isLoading = !!v;
-  const pwrap = document.querySelector('.progress-wrap');
+function updateProgress(pct, msg) {
   const pbar = document.getElementById('progress-bar');
   const pt = document.getElementById('loading-progress');
-  
+  if (pbar) pbar.style.width = `${pct}%`;
+  if (pt) pt.innerText = msg ? `${msg} (${pct}%)` : `${pct}%`;
+}
+
+function setLoading(v, msg) {
+  isLoading = !!v;
+  const modal = document.getElementById('loading');
   const searchBtn = document.getElementById('searchBtn');
   const headerBtn = document.getElementById('headerBtn');
+  
   if (searchBtn) searchBtn.disabled = v;
   if (headerBtn) headerBtn.disabled = v;
 
   if (v) {
-    if(pwrap) pwrap.style.display = 'block';
-    if(pbar) {
-      pbar.style.width = '0%';
-      setTimeout(() => { pbar.style.width = '100%'; }, 50);
-    }
-    if(pt) pt.innerText = msg || '수집 중...';
+    if (modal) modal.classList.add('active');
+    updateProgress(0, msg);
   } else {
-    if(pwrap) pwrap.style.display = 'none';
-    if(pt) pt.innerText = '';
+    // 성공 알림 등을 위해 약간 대기 후 닫기
+    setTimeout(() => {
+      if (modal) modal.classList.remove('active');
+    }, 400);
   }
 }
 
@@ -587,7 +590,7 @@ function updateGraph() {
     const hub = nodes.find(h => h.isHub && h.hubIdx === n.hubIdx);
     const hx = hub && hub.x != null && !isNaN(hub.x) ? hub.x : (W/2 + Math.cos(hubAngles[n.hubIdx])*hubR);
     const offAng = angleOffset(n);
-    const localR = n.depth===2 ? 80 : 160;
+    const localR = n.depth===2 ? 60 : 120; // 80->60, 160->120으로 반경 축소 (Containment 강화)
     return hx + Math.cos(hubAngles[n.hubIdx] + offAng) * localR;
   }
   function ty(n) {
@@ -598,7 +601,7 @@ function updateGraph() {
     const hub = nodes.find(h => h.isHub && h.hubIdx === n.hubIdx);
     const hy = hub && hub.y != null && !isNaN(hub.y) ? hub.y : (H/2 + Math.sin(hubAngles[n.hubIdx])*hubR);
     const offAng = angleOffset(n);
-    const localR = n.depth===2 ? 80 : 160;
+    const localR = n.depth===2 ? 60 : 120;
     return hy + Math.sin(hubAngles[n.hubIdx] + offAng) * localR;
   }
   function forceStr(n) {
@@ -610,9 +613,37 @@ function updateGraph() {
     return 0;
   }
 
+  // ── 클러스터 내 구속 물리 엔진 (Containment Force) ─────────────────────
+  // 각 2차, 3차 노드가 자신의 부모 허브(Halo)를 벗어나지 못하도록 강제함
+  function clusterContainmentForce(alpha) {
+    const haloR = 240; // index.html/renderHalos와 동일한 기준
+    const margin = 30; // 외곽선에서 안쪽으로의 여백
+    nodes.forEach(n => {
+      if (n.depth < 2 || n.hubIdx == null) return;
+      const hub = nodes.find(h => h.isHub && h.hubIdx === n.hubIdx);
+      if (!hub) return;
+      
+      const dx = n.x - hub.x;
+      const dy = n.y - hub.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const maxD = haloR - margin;
+
+      if (dist > maxD) {
+        const ratio = maxD / dist;
+        // 위치를 즉시 교정하여 영역 밖으로 나가는 것을 물리적으로 차단
+        n.x = hub.x + dx * ratio;
+        n.y = hub.y + dy * ratio;
+        // 속도 역시 허브 방향으로 중화
+        n.vx *= 0.5;
+        n.vy *= 0.5;
+      }
+    });
+  }
+
   simulation
     .force('clusterX', d3.forceX(tx).strength(forceStr))
     .force('clusterY', d3.forceY(ty).strength(forceStr))
+    .force('containment', clusterContainmentForce)
     .force('radial', null);
 
   // 링크 (강도 상위 MAX_LINKS_SHOW개)
@@ -636,8 +667,30 @@ function updateGraph() {
       .on('drag',(e,d)=>{
         const dx = e.x - d.x;
         const dy = e.y - d.y;
-        d.fx = e.x; d.fy = e.y;
-        d.x = e.x; d.y = e.y;
+        
+        // 1. 드래그 중인 노드 좌표 결정 (2,3차 노드면 부모 허브 영역 내로 구속)
+        if (d.depth >= 2 && d.hubIdx != null) {
+          const hub = nodes.find(h => h.isHub && h.hubIdx === d.hubIdx);
+          if (hub) {
+            const hx = hub.x, hy = hub.y;
+            const tdx = e.x - hx, tdy = e.y - hy;
+            const dist = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
+            const maxD = 210; // Halo 240px 내에 머물도록 드래그 시에도 구속
+            if (dist > maxD) {
+              const ratio = maxD / dist;
+              d.fx = hx + tdx * ratio;
+              d.fy = hy + tdy * ratio;
+            } else {
+              d.fx = e.x; d.fy = e.y;
+            }
+          }
+        } else {
+          d.fx = e.x; d.fy = e.y;
+        }
+        
+        d.x = d.fx; d.y = d.fy;
+
+        // 2. 허브를 잡고 움직일 때 자녀 노드들도 함께 이동 (Cohesive Movement)
         if (d.isHub) {
           nodes.forEach(n => {
             if (n.hubIdx === d.hubIdx && n.depth >= 2) {
@@ -827,8 +880,8 @@ svg.on('click', () => {
 });
 
 async function collectAll(rootKeyword, rootId, firstLevel) {
-  // 1차 배열 중 검색량 0인 것 필터
   const validLevel = firstLevel.filter(d => d.totalVol > 0);
+  updateProgress(15, '핵심 연관어 분석 중...');
   
   const hubs = validLevel.slice(0, MAX_HUB);
   currentClusters = hubs; 
@@ -852,16 +905,18 @@ async function collectAll(rootKeyword, rootId, firstLevel) {
     }
   });
 
+  updateProgress(30, '허브 클러스터 확장 중...');
   const d2Promises = hubs.map(async (hub, idx) => {
     const arr = await fetchNaverKeywords(hub.keyword);
-    // 허브 자신과 메인키워드 배제
+    // 각각의 허브 완료 시마다 프로그레스 미세 조정 (선택적)
     const filtered = arr.filter(x => x.keyword.toLowerCase() !== hub.keyword.toLowerCase() && x.keyword.toLowerCase() !== rootId && x.totalVol > 0);
     return { hubId: hub.keyword.toLowerCase(), hubIdx: idx, list: filtered.slice(0, MAX_D2_PER) };
   });
 
   const d2Results = await Promise.all(d2Promises);
+  updateProgress(65, '세부 연관어 맵핑 중...');
+  
   const d3Candidates = [];
-
   d2Results.forEach(res => {
     res.list.forEach(k2 => {
       const id2 = k2.keyword.toLowerCase();
@@ -891,6 +946,7 @@ async function collectAll(rootKeyword, rootId, firstLevel) {
       }
     });
   });
+  updateProgress(100, '데이터 수집 완료');
 }
 
 function updateLegend(keyword) {
