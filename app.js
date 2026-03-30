@@ -529,6 +529,10 @@ const simulation=d3.forceSimulation()
 let nodes=[],links=[];
 const nodeIds=new Set();
 let isLoading=false;
+// ── 전역 DOM 참조 (누락 시 startSearch ReferenceError 발생) ──
+const tooltipEl    = document.getElementById('info-panel');
+const infoPanelEl  = document.getElementById('info-panel');
+const emptyState   = document.getElementById('empty-state');
 
 // ── 노드 색상 (역할별 플랫) ─────────────────
 function nodeFillColor(d) {
@@ -1010,6 +1014,10 @@ document.getElementById('headerInput').addEventListener('keydown',e=>{
 });
 const copyTrendBtn=document.getElementById('copy-trend-btn');
 if(copyTrendBtn) copyTrendBtn.addEventListener('click',copyTrendData);
+function downloadExcel() {
+  if(!nodes.length){showToast('데이터가 없습니다');return;}
+  showToast('다운로드 기능은 준비 중입니다');
+}
 const dlBtn=document.getElementById('download-btn');
 if(dlBtn) dlBtn.addEventListener('click',downloadExcel);
 window.addEventListener('resize',()=>{
