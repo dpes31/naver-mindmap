@@ -597,43 +597,36 @@ function updateGraph() {
   
   // 2. 모든 노드의 좌표를 기하학적으로 계산하여 "박제(fx, fy)"
   nodes.forEach(n => {
-    // 중앙 루트
     if (n.depth === 0) { n.fx = CX; n.fy = CY; return; }
+    n.fx = null; n.fy = null;
 
-    // 1차 서브 (중앙 링 배치)
     if (n.depth === 1 && !n.isHub) {
       const idx = nonHubs.indexOf(n);
       const ang = (idx / (nonHubs.length || 1)) * 2 * Math.PI;
-      n.fx = CX + Math.cos(ang) * R_SUB;
-      n.fy = CY + Math.sin(ang) * R_SUB;
+      n.targetX = CX + Math.cos(ang) * R_SUB;
+      n.targetY = CY + Math.sin(ang) * R_SUB;
       return;
     }
 
-    // 1차 핵심 (오각형 허브 배치)
     if (n.isHub && n.hubIdx != null) {
-      n.fx = CX + Math.cos(hubAngles[n.hubIdx]) * R_HUB;
-      n.fy = CY + Math.sin(hubAngles[n.hubIdx]) * R_HUB;
+      n.targetX = CX + Math.cos(hubAngles[n.hubIdx % 4]) * R_HUB;
+      n.targetY = CY + Math.sin(hubAngles[n.hubIdx % 4]) * R_HUB;
       return;
     }
 
-    // 2차, 3차 (허브 주변 동심원 궤도 배치)
     if (n.hubIdx != null) {
-      const parentAngle = hubAngles[n.hubIdx];
-      const hx = CX + Math.cos(parentAngle) * R_HUB;
-      const hy = CY + Math.sin(parentAngle) * R_HUB;
-      
+      const hIdx = n.hubIdx % 4;
+      const hx = CX + Math.cos(hubAngles[hIdx]) * R_HUB;
+      const hy = CY + Math.sin(hubAngles[hIdx]) * R_HUB;
       const key = `${n.hubIdx}-${n.depth}`;
       const ms = memberMap[key] || [];
       const idx = ms.indexOf(n.id);
       const cnt = ms.length || 1;
-      
       const localR = (n.depth === 2) ? R_ORBIT2 : R_ORBIT3;
-      // 궤도 내 분산 배치 (3차 노드는 2차 노드 사이로 들어가게 지그재그 오프셋 적용)
       const stagger = (n.depth === 3) ? (Math.PI / cnt) : 0;
       const ang = ((idx / cnt) * 2 * Math.PI) + stagger;
-      
-      n.fx = hx + Math.cos(ang) * localR;
-      n.fy = hy + Math.sin(ang) * localR;
+      n.targetX = hx + Math.cos(ang) * localR;
+      n.targetY = hy + Math.sin(ang) * localR;
     }
   });
 
@@ -641,12 +634,11 @@ function updateGraph() {
   function forceStr(n) { return 1.0; }
 
   simulation
-    .force('x', d3.forceX().x(d => d.fx).strength(1.2))
-    .force('y', d3.forceY().y(d => d.fy).strength(1.2))
-    .force('containment', null) // 이제 fx, fy로 직접 제어하므로 containment는 보조 역할만 하거나 제거 가능
-    .force('charge', d3.forceManyBody().strength(-30))
-    .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + 12).strength(1))
-    .alpha(1).alphaTarget(0).restart();
+    .force('x', d3.forceX(d => d.targetX || d.x).strength(0.8))
+    .force('y', d3.forceY(d => d.targetY || d.y).strength(0.8))
+    .force('charge', d3.forceManyBody().strength(-35))
+    .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + 14).strength(1))
+    .alpha(1).restart();
 
   // 링크 (강도 상위 MAX_LINKS_SHOW개)
   const shownLinks=[...links].sort((a,b)=>(b.strength||0)-(a.strength||0)).slice(0,MAX_LINKS_SHOW);
@@ -684,7 +676,16 @@ function updateGraph() {
       })
       .on('end',(e,d)=>{
         if(!e.active) simulation.alphaTarget(0);
-        // 고정 해제하지 않고 유지하여 안정성 확보 (회장님 요청: 방정맞은 움직임 차단)
+        // 고정 해제하여 "탄성 회귀" 발동 (targetX, targetY를 향해 돌아감)
+        if (d.depth !== 0) { d.fx = null; d.fy = null; }
+        
+        if (d.isHub) {
+          nodes.forEach(n => {
+            if (n.hubIdx === d.hubIdx) {
+              n.fx = null; n.fy = null;
+            }
+          });
+        }
       }))
       .on('mouseenter',onHover).on('mouseleave',onLeave).on('click',onClick);
   }
@@ -695,8 +696,7 @@ function updateGraph() {
     .attr('fill',d=>nodeFillColor(d))
     .attr('fill-opacity', 1.0)
     .attr('stroke', d=>d.depth===0?'rgba(255,255,255,0.8)':'rgba(255,255,255,0.6)')
-    .attr('stroke-width', d=>d.depth===0?3:1)
-    .attr('filter', 'url(#solid-shadow)');
+    .attr('stroke-width', d=>d.depth===0?3:1);
 
   // 텍스트 — 클린 볼드, 테두리 없음
   enter.each(function(d) {
@@ -780,8 +780,8 @@ function renderHalos() {
       .attr('fill', color).attr('fill-opacity', 0.05)
       .attr('stroke', color).attr('stroke-width', 2)
       .attr('stroke-dasharray', '8,4')
-      .attr('stroke-opacity', 0.8)
-      .style('filter', 'drop-shadow(0 4px 12px rgba(0,0,0,0.03))');
+      .attr('stroke-opacity', 0.8);
+      // 검은색 바 유발하던 필터 속성 제거로 그래픽 노이즈 원천 차단
   });
 }
 
@@ -850,25 +850,37 @@ svg.on('click', () => {
 });
 
 async function collectAll(rootKeyword, rootId, firstLevel) {
-  // 회장님 요청: 검색량 0인 키워드도 유효 데이터로 포함하여 풍성하게 구성
-  const validLevel = firstLevel; 
   updateProgress(15, '핵심 연관어 분석 중...');
   
-  const hubs = validLevel.slice(0, MAX_HUB);
-  currentClusters = hubs; 
+  // 1. 중복 제거 및 검색어 자신 제외 (정교한 필터링)
+  const normRoot = rootId.toLowerCase().trim();
+  const uniqueRelated = [];
+  const seenKws = new Set([normRoot]);
   
-  hubs.forEach((h, i) => {
-    const id = h.keyword.toLowerCase();
-    if (!nodeIds.has(id)) {
-      nodeIds.add(id);
-      nodes.push({ ...h, id, label: h.keyword, depth: 1, isHub: true, hubIdx: i });
-      links.push({ source: rootId, target: id, strength: h.totalVol || 1 });
+  firstLevel.forEach(item => {
+    const k = item.keyword.toLowerCase().trim();
+    if (!seenKws.has(k)) {
+      seenKws.add(k);
+      uniqueRelated.push(item);
     }
   });
 
-  const nonHubs = validLevel.slice(MAX_HUB, MAX_HUB + MAX_D1);
+  // 2. 정예 4개 집단 선정 (무조건 1~4순위만 생성되도록)
+  const hubs = uniqueRelated.slice(0, MAX_HUB);
+  currentClusters = hubs; 
+  
+  hubs.forEach((h, i) => {
+    const id = h.keyword.toLowerCase().trim();
+    nodeIds.add(id);
+    // 여기서 i는 0, 1, 2, 3으로 고정됨 -> 화면상 1, 2, 3, 4 순위로 표기
+    nodes.push({ ...h, id, label: h.keyword, depth: 1, isHub: true, hubIdx: i });
+    links.push({ source: rootId, target: id, strength: h.totalVol || 1 });
+  });
+
+  // 3. 나머지 1차 서브 키워드 배치
+  const nonHubs = uniqueRelated.slice(MAX_HUB, MAX_HUB + MAX_D1);
   nonHubs.forEach(h => {
-    const id = h.keyword.toLowerCase();
+    const id = h.keyword.toLowerCase().trim();
     if (!nodeIds.has(id)) {
       nodeIds.add(id);
       nodes.push({ ...h, id, label: h.keyword, depth: 1, isHub: false });
