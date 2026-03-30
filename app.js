@@ -2,13 +2,14 @@ const ROOT_COLOR     = '#4F46E5';   // Apple System Indigo
 // 카테고리 halo 배경 색
 const CLUSTER_COLORS = ['#6366F1','#10B981','#F97316','#06B6D4','#EC4899']; // Indigo, Emerald, Orange, Cyan, Pink
 // 노드 fill 색 (역할별)
-const NON_HUB_COLOR  = '#86EFAC';   // Light Green (1차 서브 연관 - 사용자 요청 반영)
+const HUB_COLOR      = '#10B981';   // 1차 핵심 연관 (통일된 초록색)
+const NON_HUB_COLOR  = '#D1FAE5';   // 1차 서브 연관 (흐릿한 초록)
 const D2_COLOR       = '#FBBF24';   // Amber (2차)
 const D3_COLOR       = '#E2E8F0';   // Light Gray (3차 - 시각적 구분 명확화)
 
 // 레전드용
-const DEPTH_COLORS   = [ROOT_COLOR, '#10B981', D2_COLOR, D3_COLOR];
-const DEPTH_OPACITY  = [1, 1, 1, 1];
+const DEPTH_COLORS   = [ROOT_COLOR, HUB_COLOR, NON_HUB_COLOR, D2_COLOR, D3_COLOR];
+const DEPTH_OPACITY  = [1, 1, 1, 1, 1];
 
 const MAX_HUB        = 5;
 const MAX_D1         = 9;
@@ -462,11 +463,11 @@ const zoom=d3.zoom()
   });
 svg.call(zoom);
 
-// 초기 마인드맵 더 작게 시작하여 전체 뷰가 한 눈에 쾌적하게 잡히도록 0.7 배율 세팅
+// 초기 마인드맵: 마인드맵 카테고리끼리 겹치지 않게 확장되었으므로, 화면에 다 들어오도록 0.38 배율 세팅
 const _gEl = document.getElementById('graph');
 const _gW = _gEl.clientWidth || 800;
 const _gH = _gEl.clientHeight || 600;
-svg.call(zoom.transform, d3.zoomIdentity.translate(_gW/2, _gH/2).scale(0.7).translate(-_gW/2, -_gH/2));
+svg.call(zoom.transform, d3.zoomIdentity.translate(_gW/2, _gH/2).scale(0.38).translate(-_gW/2, -_gH/2));
 
 function boundingForce() {
   const el=document.getElementById('graph');
@@ -496,7 +497,7 @@ let isLoading=false;
 // ── 노드 색상 (역할별 플랫) ─────────────────
 function nodeFillColor(d) {
   if (d.depth===0) return ROOT_COLOR;
-  if (d.isHub)     return CLUSTER_COLORS[(d.hubIdx || 0) % CLUSTER_COLORS.length]; // 반드시 카테고리와 1:1 매칭
+  if (d.isHub)     return HUB_COLOR; // 1차 핵심 연관 통일 (사용자 요청)
   if (d.depth===1) return NON_HUB_COLOR; 
   if (d.depth===2) return D2_COLOR;
   if (d.depth===3) return D3_COLOR;
@@ -505,6 +506,8 @@ function nodeFillColor(d) {
 function nodeGlowColor(d) { return nodeFillColor(d); }
 function nodeTextColor(d) {
   if (d.depth===0) return '#FFFFFF';
+  if (d.isHub)     return '#FFFFFF';
+  if (d.depth===1) return '#065F46'; // 흐린 배경 대비 진한 텍스트
   if (d.depth===3) return '#334155';
   return '#111827';
 }
@@ -515,7 +518,7 @@ function updateGraph() {
   const W=el.clientWidth||800, H=el.clientHeight||600;
 
   // 반경: 카테고리별 영역이 배타적으로 구분되도록 허브를 화면 전체에 넓게 배치
-  const hubR  = Math.max(W, H) * 0.28; // 허브들을 중심에서 배타적으로 멀리 분리
+  const hubR  = Math.max(W, H) * 0.38; // 허브 반경 대폭 확대 (카테고리 원형 영역 135px가 겹치지 않도록)
 
   // 허브 각도: currentClusters.length 기준 pre-allocate
   // hubIdx(0~N-1)로 직접 접근하므로 배열 크기 = 실제 허브 수
@@ -555,7 +558,7 @@ function updateGraph() {
     // 부모 허브의 좌표를 기점으로 방사형 거리를 둠 (절대 다른 허브 구역을 침범하지 않음)
     const baseAng = hubAngles[n.hubIdx];
     const offAng = angleOffset(n);
-    const localR = n.depth===2 ? 80 : 130; // 허브와의 로컬 거리
+    const localR = n.depth===2 ? 55 : 105; // 허브와의 로컬 거리 (원형 반경 135px 내부에 완벽히 종속됨)
     const cx = W/2 + Math.cos(baseAng)*hubR; 
     return cx + Math.cos(baseAng + offAng) * localR;
   }
@@ -567,7 +570,7 @@ function updateGraph() {
     
     const baseAng = hubAngles[n.hubIdx];
     const offAng = angleOffset(n);
-    const localR = n.depth===2 ? 80 : 130; 
+    const localR = n.depth===2 ? 55 : 105; 
     const cy = H/2 + Math.sin(baseAng)*hubR;
     return cy + Math.sin(baseAng + offAng) * localR;
   }
@@ -684,25 +687,24 @@ function updateGraph() {
   });
 }
 
-// ── 허브 헐(halo) 렌더 — 라벨 제거, 선 강조 ─────────────────
+// ── 허브 헐(halo) 렌더 — 겹치지 않는 완전한 원형 구조 ─────────────────
 function renderHalos() {
-  halosG.selectAll('.ch').data(currentClusters,d=>d.id).join(
-    enter=>enter.append('g').attr('class','ch').call(g=>{
-      g.append('path').attr('class','ch-fill');
+  const hubs = nodes.filter(n => n.isHub && n.x != null && !isNaN(n.x));
+  
+  halosG.selectAll('.ch').data(hubs, d => d.id).join(
+    enter => enter.append('g').attr('class', 'ch').call(g => {
+      g.append('circle').attr('class', 'ch-fill');
     })
-  ).each(function(cluster){
-    const hi=cluster.hubIdx;
-    const cNodes=nodes.filter(n=>
-      (n.isHub && n.hubIdx===hi) || (n.hubIdx===hi && n.depth>=2)
-    ).filter(n=>n.x!=null&&!isNaN(n.x));
-    if(cNodes.length<2) return;
-    const pts=cNodes.map(n=>[n.x,n.y]);
-    const pad=55; // 패딩 증가 및 완벽한 부드러운 외곽선 함수 호출
+  ).each(function(hub) {
+    const color = CLUSTER_COLORS[hub.hubIdx % CLUSTER_COLORS.length];
     d3.select(this).select('.ch-fill')
-      .attr('d',smoothHull(pts,pad))
-      .attr('fill',cluster.color).attr('fill-opacity',0.08)
-      .attr('stroke',cluster.color).attr('stroke-width',2)
-      .attr('stroke-opacity',0.5)
+      .attr('cx', hub.x)
+      .attr('cy', hub.y)
+      .attr('r', 135) // 절대로 겹치지 않는 고정된 독립 반경
+      .attr('fill', color).attr('fill-opacity', 0.05)
+      .attr('stroke', color).attr('stroke-width', 2)
+      .attr('stroke-dasharray', '8,4')
+      .attr('stroke-opacity', 0.8)
       .style('filter', 'drop-shadow(0 4px 12px rgba(0,0,0,0.03))');
   });
 }
