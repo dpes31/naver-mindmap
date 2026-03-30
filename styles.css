@@ -2,36 +2,26 @@
 
 :root {
   --font: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard Variable", Pretendard, Roboto, "Noto Sans KR", "Segoe UI", "Malgun Gothic", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
-  /* 동적인 Mesh Gradient 애니메이션 효과를 위해 여러 레이어의 그라데이션 사용 */
-  --bg-color-1: #dbeafe; /* 아주 연한 파란색 */
-  --bg-color-2: #e0e7ff; /* 아주 연한 인디고 */
-  --bg-color-3: #fce7f3; /* 연한 핑크 */
-  --bg-color-4: #f3e8ff; /* 연한 보라 */
+  --bg-color: #F4F7FC; /* 아주 깨끗하고 연한 라벤더/그레이 (SaaS 톤) */
   
-  --glass:  rgba(255, 255, 255, 0.45);
-  --glass2: rgba(255, 255, 255, 0.25);
-  /* visionOS 스타일의 빛 반사 테두리 */
-  --border: rgba(255, 255, 255, 0.5);
-  --border2: rgba(255, 255, 255, 0.2);
-  /* Apple 스타일의 깊고 부드러운 다중 섀도우 */
-  --shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.05), 0 1px 3px -1px rgba(0, 0, 0, 0.03);
-  --shadow2: 0 20px 40px -4px rgba(0, 0, 0, 0.1), 0 8px 16px -4px rgba(0, 0, 0, 0.06);
-  --shadow-float: 0 30px 60px -12px rgba(0,0,0,0.15), 0 18px 36px -18px rgba(0,0,0,0.1);
-  --blur: blur(24px) saturate(180%);
-  --accent: #007AFF; /* Apple System Blue */
-  --green: #34C759;  /* Apple System Green */
-  --pink: #FF2D55;   /* Apple System Pink */
-  --indigo: #5856D6; /* Apple System Indigo */
-  --text: #1d1d1f;   /* Apple Typography Black */
-  --muted: #86868b;  /* Apple Typography Gray */
-  --r: 24px;         /* Squircle 모서리 느낌을 위해 반경 증가 */
+  --surface: #FFFFFF; /* 솔리드 화이트 패널 */
+  --border: rgba(0, 0, 0, 0.05);
+  --border2: rgba(0, 0, 0, 0.03);
+  
+  /* 깊고 부드러운 다중 섀도우 (공간감 부여) */
+  --shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
+  --shadow2: 0 16px 32px -4px rgba(0, 0, 0, 0.06), 0 8px 16px -4px rgba(0, 0, 0, 0.03);
+  --shadow-float: 0 24px 48px -12px rgba(0, 0, 0, 0.08), 0 12px 24px -8px rgba(0, 0, 0, 0.05);
+  --blur: none;
+  
+  --accent: #6366F1; /* Indigo */
+  --green: #10B981;  /* Emerald */
+  --pink: #EC4899;   /* Pink */
+  --indigo: #4F46E5;
+  --text: #111827;   /* Slate 900 (High Contrast) */
+  --muted: #6B7280;  /* Slate 500 */
+  --r: 20px;         /* 둥근 카드 모서리 */
   --margin: max(6%, 24px);
-}
-
-@keyframes mesh-gradient {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
 }
 
 html {
@@ -43,20 +33,12 @@ html {
 body {
   font-family: var(--font);
   letter-spacing: -0.015em;
-  /* 부드럽게 움직이는 Mesh Gradient 애니메이션 */
-  background: 
-    radial-gradient(at 0% 0%, var(--bg-color-1) 0px, transparent 50%),
-    radial-gradient(at 100% 0%, var(--bg-color-2) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, var(--bg-color-3) 0px, transparent 50%),
-    radial-gradient(at 0% 100%, var(--bg-color-4) 0px, transparent 50%),
-    #f2f2f7; /* Apple 시스템 라이트모드 배경색 */
-  background-size: 200% 200%;
-  animation: mesh-gradient 15s ease infinite;
+  background: var(--bg-color);
   min-height: 100vh;
   color: var(--text);
   overflow-x: hidden;
   max-width: 100vw;
-  -webkit-font-smoothing: antialiased; /* Mac 폰트 렌더링 최적화 */
+  -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
@@ -123,11 +105,11 @@ body {
 /* ── HEADER ── */
 header {
   position: sticky; top: 0; z-index: 200;
-  background: rgba(255,255,255,0.72);
-  backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
-  border-bottom: 1px solid rgba(255,255,255,0.3);
-  box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.03);
   padding: 12px 32px;
   display: flex; align-items: center; gap: 16px;
 }
@@ -189,12 +171,9 @@ header.hidden { display: none; }
 
 /* ── STATS SECTION ── */
 .stats-section {
-  background: var(--glass);
-  backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
+  background: var(--surface);
   border-radius: var(--r);
   border: 1px solid var(--border);
-  border-bottom: 1px solid var(--border2);
   box-shadow: var(--shadow);
   padding: 24px 28px 28px;
   margin: 20px 0 0;
@@ -273,19 +252,15 @@ header.hidden { display: none; }
 .cards-panel::-webkit-scrollbar-thumb:hover { background: #6b7280; }
 
 .kw-card {
-  background: var(--glass2);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-bottom: 1px solid var(--border2);
   border-radius: 16px; padding: 14px 16px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 .kw-card:hover { 
-  transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 16px 32px -8px rgba(0,0,0,0.08); 
-  background: var(--glass); 
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -4px rgba(0,0,0,0.06); 
 }
 
 .card-title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
@@ -323,14 +298,11 @@ header.hidden { display: none; }
   margin: 12px 0 0;
 }
 .ga-card {
-  background: var(--glass);
-  backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-bottom: 1px solid var(--border2);
   border-radius: var(--r); padding: 22px 24px;
   box-shadow: var(--shadow);
-  transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: all 0.3s ease;
 }
 .ga-card:hover { box-shadow: var(--shadow2); transform: translateY(-1px); }
 .ga-title { font-size: 20px; font-weight: 700; color: var(--accent); letter-spacing: -0.5px; margin-bottom: 14px; }
@@ -381,11 +353,8 @@ header.hidden { display: none; }
 }
 .mindmap-content-wrap {
   flex: 1; display: flex; flex-direction: column;
-  background: var(--glass2);
-  backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-bottom: 1px solid var(--border2);
   border-radius: var(--r);
   box-shadow: var(--shadow);
   overflow: hidden;

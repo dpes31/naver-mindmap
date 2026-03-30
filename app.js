@@ -1,12 +1,12 @@
 // ── 설정 ──────────────────────────────────────────
-const ROOT_COLOR     = '#007AFF';   // Apple System Blue
+const ROOT_COLOR     = '#4F46E5';   // Apple System Indigo
 // 카테고리 halo 배경 색
-const CLUSTER_COLORS = ['#007AFF','#34C759','#FF9500','#AF52DE','#FF2D55']; // Blue, Green, Orange, Purple, Pink
+const CLUSTER_COLORS = ['#6366F1','#10B981','#F97316','#8B5CF6','#EC4899']; // Indigo, Emerald, Orange, Purple, Pink
 // 노드 fill 색 (역할별)
-const HUB_COLOR      = '#34C759';   // Apple System Green (허브)
-const NON_HUB_COLOR  = '#5AC8FA';   // Apple System Light Blue (서브 연관)
-const D2_COLOR       = '#FFCC00';   // Apple System Yellow (2차)
-const D3_COLOR       = '#8E8E93';   // Apple System Gray (3차)
+const HUB_COLOR      = '#10B981';   // Emerald (허브)
+const NON_HUB_COLOR  = '#38BDF8';   // Light Blue (서브 연관)
+const D2_COLOR       = '#FBBF24';   // Amber (2차)
+const D3_COLOR       = '#CBD5E1';   // Slate 300 (3차)
 
 // 레전드용
 const DEPTH_COLORS   = [ROOT_COLOR, HUB_COLOR, D2_COLOR, D3_COLOR];
@@ -341,8 +341,8 @@ function renderGenderAge(data) {
 // ── 노드 반경 (검색량 비례 — 같은 depth 내 log 스케일) ────
 // base: 역할별 기본 크기 / range: ±range 범위로 검색량 비례 변화
 function nodeRadius(d) {
-  const base  = d.depth===0?52:d.isHub?36:d.depth===1?18:d.depth===2?22:13;
-  const range = d.depth===0?0:d.isHub?16:d.depth===1?7:d.depth===2?10:5;
+  const base  = d.depth===0?56:d.isHub?46:d.depth===1?22:d.depth===2?26:15;
+  const range = d.depth===0?0:d.isHub?20:d.depth===1?8:d.depth===2?12:6;
   if (!d.totalVol || range===0 || !nodes.length) return base;
   const peers = nodes.filter(n => d.isHub ? n.isHub : (n.depth===d.depth && !n.isHub));
   const maxVol = Math.max(...peers.map(n=>n.totalVol), 1);
@@ -429,21 +429,16 @@ fm.append('feMergeNode').attr('in','coloredBlur');
 fm.append('feMergeNode').attr('in','SourceGraphic');
 
 // 버블 헤일로용 소프트 블러 필터 (feGaussianBlur, 넓게 퍼지는 glow)
-const softBlur=defs.append('filter').attr('id','soft-blur')
-  .attr('x','-120%').attr('y','-120%').attr('width','340%').attr('height','340%');
-softBlur.append('feGaussianBlur').attr('stdDeviation','14');
-
-// 프리미엄 유리 구슬(Glass Orb) 필터 (빛 반사 하이라이트 추가)
-const glassOrb = defs.append('filter').attr('id','glass-orb').attr('x','-20%').attr('y','-20%').attr('width','140%').attr('height','140%');
-glassOrb.append('feGaussianBlur').attr('in','SourceAlpha').attr('stdDeviation','2').attr('result','blur');
-const spec = glassOrb.append('feSpecularLighting')
-  .attr('in','blur').attr('surfaceScale','4').attr('specularConstant','0.8')
-  .attr('specularExponent','25').attr('lighting-color','#ffffff').attr('result','specOut');
-spec.append('fePointLight').attr('x','-30').attr('y','-30').attr('z','80');
-glassOrb.append('feComposite').attr('in','specOut').attr('in2','SourceAlpha').attr('operator','in').attr('result','specOut');
-const fb = glassOrb.append('feMerge');
-fb.append('feMergeNode').attr('in','SourceGraphic');
-fb.append('feMergeNode').attr('in','specOut');
+// 솔리드 마인드맵 노드용 그림자 필터
+const dropShadow = defs.append('filter').attr('id', 'solid-shadow')
+  .attr('x', '-20%').attr('y', '-20%').attr('width', '140%').attr('height', '140%');
+dropShadow.append('feGaussianBlur').attr('in', 'SourceAlpha').attr('stdDeviation', '3').attr('result', 'blur');
+dropShadow.append('feOffset').attr('dx', '0').attr('dy', '4').attr('result', 'offsetBlur');
+dropShadow.append('feFlood').attr('flood-color', 'rgba(0,0,0,0.15)').attr('result', 'shadowColor');
+dropShadow.append('feComposite').attr('in', 'shadowColor').attr('in2', 'offsetBlur').attr('operator', 'in').attr('result', 'shadow');
+const fb = dropShadow.append('feMerge');
+fb.append('feMergeNode').attr('in', 'shadow');
+fb.append('feMergeNode').attr('in', 'SourceGraphic');
 
 function lighten(hex,a) {
   const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
@@ -509,10 +504,9 @@ function nodeFillColor(d) {
 }
 function nodeGlowColor(d) { return nodeFillColor(d); }
 function nodeTextColor(d) {
-  if (d.depth===0 || d.isHub || d.depth===3) return '#ffffff';
-  if (d.depth===1) return '#003366';  // Light Blue 위 → Dark Blue
-  if (d.depth===2) return '#664d00';  // Yellow 위 → Dark Brown
-  return '#1d1d1f';
+  if (d.depth===0) return '#FFFFFF';
+  if (d.depth===3) return '#334155';
+  return '#111827';
 }
 
 // ── 그래프 렌더 ───────────────────────────────────────
@@ -599,46 +593,52 @@ function updateGraph() {
       .on('end',(e,d)=>{if(!e.active)simulation.alphaTarget(0);d.fx=null;d.fy=null;}))
     .on('mouseenter',onHover).on('mouseleave',onLeave).on('click',onClick);
 
-  // 버블 헤일로 — 블러 처리된 넓은 glow (첨부1 버블차트 스타일)
-  enter.append('circle').attr('class','node-glow')
-    .attr('r',d=>nodeRadius(d)*(d.depth===0?2.0:d.isHub?1.9:1.7))
-    .attr('fill',d=>nodeFillColor(d))
-    .attr('fill-opacity',d=>d.depth===0?0.32:d.isHub?0.26:d.depth===1?0.20:d.depth===2?0.18:0.14)
-    .attr('filter','url(#soft-blur)')
-    .attr('stroke','none');
-
-  // 메인 원 — 프리미엄 Glass Orb 반투명 + 1px 테두리 + 빛 반사 필터
+  // 메인 원 — 솔리드 SaaS 스타일 (단색 + 선명한 쉐도우)
   enter.append('circle').attr('class','node-circle')
     .attr('r',d=>nodeRadius(d))
     .attr('fill',d=>nodeFillColor(d))
-    .attr('fill-opacity',d=>d.depth===3?0.6:d.depth===1&&!d.isHub?0.75:0.85)
-    .attr('stroke','rgba(255,255,255,0.7)')
-    .attr('stroke-width',d=>d.depth===0?1.5:1)
-    .attr('filter','url(#glass-orb)');
+    .attr('fill-opacity', 1.0)
+    .attr('stroke', d=>d.depth===0?'rgba(255,255,255,0.8)':'rgba(255,255,255,0.6)')
+    .attr('stroke-width', d=>d.depth===0?3:1)
+    .attr('filter', 'url(#solid-shadow)');
 
   // 텍스트 — 클린 볼드, 테두리 없음
   enter.each(function(d) {
     const r=nodeRadius(d);
-    const fs=d.depth===0?14:d.isHub?12:d.depth===1?10:d.depth===2?9:8;
+    const fs=d.depth===0?15:d.isHub?13:d.depth===1?11:d.depth===2?10:9;
+    const isHubLabel = d.isHub ? `${d.hubIdx + 1}순위 핵심 연관` : null;
     const maxW=r*1.85;
     const cpl=Math.max(2,Math.floor(maxW/(fs*0.62)));
     const chars=[...d.label];
     const lines=[];
     for(let i=0;i<chars.length;i+=cpl) lines.push(chars.slice(i,i+cpl).join(''));
-    const lh=fs+2;
-    // cap-height 보정: SVG baseline은 시각적 중심보다 아래 → +fs*0.35 로 위로 이동
-    const startY=-(lines.length-1)*lh/2 + fs*0.35;
+    
+    const lh=fs+3;
+    const totalLines = isHubLabel ? lines.length + 1 : lines.length;
+    const startY=-(totalLines-1)*lh/2 + fs*0.35;
     const fillCol=nodeTextColor(d);
+    
     const txt=d3.select(this).append('text').attr('class','node-label')
       .attr('text-anchor','middle').attr('fill',fillCol)
       .attr('stroke','none')
       .attr('font-size',`${fs}px`).attr('font-weight','700')
-      .attr('font-family','-apple-system,BlinkMacSystemFont,system-ui,sans-serif')
+      .attr('font-family','var(--font)')
       .attr('letter-spacing','-0.02em')
       .attr('pointer-events','none');
-    lines.forEach((l,i)=>{
-      txt.append('tspan').attr('x',0).attr('dy',i===0?startY:lh).text(l);
-    });
+      
+    if (isHubLabel) {
+      txt.append('tspan').attr('x',0).attr('dy',startY)
+         .attr('font-size',`${fs*0.75}px`).attr('font-weight','800')
+         .attr('fill', 'rgba(0,0,0,0.5)')
+         .text(isHubLabel);
+      lines.forEach((l,i)=>{
+        txt.append('tspan').attr('x',0).attr('dy',lh).text(l);
+      });
+    } else {
+      lines.forEach((l,i)=>{
+        txt.append('tspan').attr('x',0).attr('dy',i===0?startY:lh).text(l);
+      });
+    }
   });
 
   enter.transition().duration(500).ease(d3.easeCubicOut).style('opacity',1);
@@ -690,12 +690,13 @@ function renderHalos() {
     ).filter(n=>n.x!=null&&!isNaN(n.x));
     if(cNodes.length<2) return;
     const pts=cNodes.map(n=>[n.x,n.y]);
-    const pad=28;
+    const pad=45; // 넓은 영역 확보
     d3.select(this).select('.ch-fill')
       .attr('d',hullPath(pts,pad))
-      .attr('fill',cluster.color).attr('fill-opacity',0.10)
-      .attr('stroke',cluster.color).attr('stroke-width',2.2)
-      .attr('stroke-opacity',0.55);
+      .attr('fill',cluster.color).attr('fill-opacity',0.08)
+      .attr('stroke',cluster.color).attr('stroke-width',2)
+      .attr('stroke-opacity',0.4)
+      .style('filter', 'drop-shadow(0 4px 12px rgba(0,0,0,0.03))');
   });
 }
 
@@ -706,7 +707,6 @@ const infoPanelEl=document.getElementById('info-panel');
 function onHover(e,d) {
   const r=nodeRadius(d);
   d3.select(this).select('.node-circle').transition().duration(250).ease(d3.easeSpring||d3.easeCubicOut).attr('r',r*1.12);
-  d3.select(this).select('.node-glow').transition().duration(250).attr('fill-opacity',0.3);
   tooltipEl.textContent=d.label;
   tooltipEl.style.left=(e.clientX+14)+'px';tooltipEl.style.top=(e.clientY-8)+'px';
   tooltipEl.classList.add('visible');
@@ -728,8 +728,6 @@ function onHover(e,d) {
 function onLeave(e,d) {
   const r=nodeRadius(d);
   d3.select(this).select('.node-circle').transition().duration(250).ease(d3.easeCubicOut).attr('r',r);
-  const glowOp=d.depth===0?0.32:d.isHub?0.26:d.depth===1?0.20:d.depth===2?0.18:0.14;
-  d3.select(this).select('.node-glow').transition().duration(150).attr('fill-opacity',glowOp);
   tooltipEl.classList.remove('visible');
   nodesG.selectAll('g.node-group').transition().duration(200).style('opacity',1);
   linksG.selectAll('path.link-path').transition().duration(200).style('opacity',1);
