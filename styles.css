@@ -1,40 +1,63 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --font: 'Manrope', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
-  --bg: radial-gradient(ellipse at 15% 25%, #bfdbfe 0%, transparent 55%),
-        radial-gradient(ellipse at 85% 75%, #ddd6fe 0%, transparent 55%),
-        radial-gradient(ellipse at 60% 5%,  #bbf7d0 0%, transparent 45%),
-        #eef2f8;
-  --glass:  rgba(255,255,255,0.42);
-  --glass2: rgba(255,255,255,0.28);
-  --border: rgba(255,255,255,0.22);
-  --border2: rgba(0,0,0,0.05);
-  --shadow: 0 20px 50px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.04);
-  --shadow2: 0 24px 64px rgba(0,0,0,0.13), 0 2px 8px rgba(0,0,0,0.05);
-  --blur: blur(32px) saturate(220%);
-  --accent: #1E40AF;
-  --green: #16a34a;
-  --pink: #EC4899;
-  --text: #111827;
-  --muted: #6b7280;
-  --r: 18px;
-  --margin: 6%;
+  --font: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard Variable", Pretendard, Roboto, "Noto Sans KR", "Segoe UI", "Malgun Gothic", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+  /* 동적인 Mesh Gradient 애니메이션 효과를 위해 여러 레이어의 그라데이션 사용 */
+  --bg-color-1: #dbeafe; /* 아주 연한 파란색 */
+  --bg-color-2: #e0e7ff; /* 아주 연한 인디고 */
+  --bg-color-3: #fce7f3; /* 연한 핑크 */
+  --bg-color-4: #f3e8ff; /* 연한 보라 */
+  
+  --glass:  rgba(255, 255, 255, 0.45);
+  --glass2: rgba(255, 255, 255, 0.25);
+  /* visionOS 스타일의 빛 반사 테두리 */
+  --border: rgba(255, 255, 255, 0.5);
+  --border2: rgba(255, 255, 255, 0.2);
+  /* Apple 스타일의 깊고 부드러운 다중 섀도우 */
+  --shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.05), 0 1px 3px -1px rgba(0, 0, 0, 0.03);
+  --shadow2: 0 20px 40px -4px rgba(0, 0, 0, 0.1), 0 8px 16px -4px rgba(0, 0, 0, 0.06);
+  --shadow-float: 0 30px 60px -12px rgba(0,0,0,0.15), 0 18px 36px -18px rgba(0,0,0,0.1);
+  --blur: blur(24px) saturate(180%);
+  --accent: #007AFF; /* Apple System Blue */
+  --green: #34C759;  /* Apple System Green */
+  --pink: #FF2D55;   /* Apple System Pink */
+  --indigo: #5856D6; /* Apple System Indigo */
+  --text: #1d1d1f;   /* Apple Typography Black */
+  --muted: #86868b;  /* Apple Typography Gray */
+  --r: 24px;         /* Squircle 모서리 느낌을 위해 반경 증가 */
+  --margin: max(6%, 24px);
+}
+
+@keyframes mesh-gradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
 html {
   scroll-behavior: smooth;
-  overflow-x: hidden;   /* 우측 잘림 방지 */
+  overflow-x: hidden;
   max-width: 100vw;
 }
+
 body {
   font-family: var(--font);
-  letter-spacing: -0.02em;
-  background: var(--bg);
+  letter-spacing: -0.015em;
+  /* 부드럽게 움직이는 Mesh Gradient 애니메이션 */
+  background: 
+    radial-gradient(at 0% 0%, var(--bg-color-1) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, var(--bg-color-2) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, var(--bg-color-3) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, var(--bg-color-4) 0px, transparent 50%),
+    #f2f2f7; /* Apple 시스템 라이트모드 배경색 */
+  background-size: 200% 200%;
+  animation: mesh-gradient 15s ease infinite;
   min-height: 100vh;
   color: var(--text);
   overflow-x: hidden;
   max-width: 100vw;
+  -webkit-font-smoothing: antialiased; /* Mac 폰트 렌더링 최적화 */
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* ── 히어로 랜딩 ── */
@@ -64,14 +87,20 @@ body {
 .hero-search-box {
   display: flex; align-items: center;
   width: min(560px, 90vw);
-  background: rgba(255,255,255,0.78);
-  backdrop-filter: blur(28px) saturate(200%);
-  -webkit-backdrop-filter: blur(28px) saturate(200%);
-  border: 2.5px solid rgba(255,255,255,0.65);
-  border-radius: 22px;
-  box-shadow: 0 8px 48px rgba(99,102,241,0.14), 0 2px 8px rgba(0,0,0,0.06);
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--border);
+  border-bottom: 1px solid var(--border2);
+  border-radius: 30px;
+  box-shadow: var(--shadow-float);
   padding: 8px 8px 8px 20px;
   gap: 8px;
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease;
+}
+.hero-search-box:focus-within {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 40px 80px -16px rgba(0,0,0,0.2), 0 20px 40px -20px rgba(0,0,0,0.15);
 }
 .hero-search-box input {
   flex: 1; border: none; background: transparent; outline: none;
@@ -165,8 +194,9 @@ header.hidden { display: none; }
   -webkit-backdrop-filter: var(--blur);
   border-radius: var(--r);
   border: 1px solid var(--border);
+  border-bottom: 1px solid var(--border2);
   box-shadow: var(--shadow);
-  padding: 22px 24px 24px;
+  padding: 24px 28px 28px;
   margin: 20px 0 0;
 }
 .trend-note {
@@ -243,15 +273,20 @@ header.hidden { display: none; }
 .cards-panel::-webkit-scrollbar-thumb:hover { background: #6b7280; }
 
 .kw-card {
-  background: rgba(255,255,255,0.55);
+  background: var(--glass2);
   backdrop-filter: blur(16px) saturate(180%);
   -webkit-backdrop-filter: blur(16px) saturate(180%);
-  border: 1px solid rgba(255,255,255,0.25);
-  border-radius: 14px; padding: 12px 14px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
-  transition: box-shadow 0.15s, background 0.15s;
+  border: 1px solid var(--border);
+  border-bottom: 1px solid var(--border2);
+  border-radius: 16px; padding: 14px 16px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
-.kw-card:hover { box-shadow: 0 8px 28px rgba(0,0,0,0.10); background: rgba(255,255,255,0.70); }
+.kw-card:hover { 
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 16px 32px -8px rgba(0,0,0,0.08); 
+  background: var(--glass); 
+}
 
 .card-title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
 .rank-badge {
@@ -288,13 +323,16 @@ header.hidden { display: none; }
   margin: 12px 0 0;
 }
 .ga-card {
-  background: rgba(255,255,255,0.42);
+  background: var(--glass);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--border);
-  border-radius: var(--r); padding: 18px 20px;
+  border-bottom: 1px solid var(--border2);
+  border-radius: var(--r); padding: 22px 24px;
   box-shadow: var(--shadow);
+  transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+.ga-card:hover { box-shadow: var(--shadow2); transform: translateY(-1px); }
 .ga-title { font-size: 20px; font-weight: 700; color: var(--accent); letter-spacing: -0.5px; margin-bottom: 14px; }
 .ga-placeholder { font-size: 12px; color: #9ca3af; text-align: center; padding: 12px 0; border: 1.5px dashed #d1d5db; border-radius: 8px; line-height: 1.6; }
 
@@ -343,10 +381,11 @@ header.hidden { display: none; }
 }
 .mindmap-content-wrap {
   flex: 1; display: flex; flex-direction: column;
-  background: rgba(255,255,255,0.38);
+  background: var(--glass2);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--border);
+  border-bottom: 1px solid var(--border2);
   border-radius: var(--r);
   box-shadow: var(--shadow);
   overflow: hidden;
