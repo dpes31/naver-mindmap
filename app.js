@@ -395,7 +395,7 @@ function renderGenderAge(data) {
 // ── 노드 반경 (검색량 비례 — 같은 depth 내 log 스케일) ────
 // base: 역할별 기본 크기 / range: ±range 범위로 검색량 비례 변화
 function nodeRadius(d) {
-  const base  = d.depth===0?70:d.isHub?38:d.depth===1?16:d.depth===2?20:12;
+  const base  = d.depth===0?85:d.isHub?38:d.depth===1?16:d.depth===2?20:12;
   const range = d.depth===0?0:d.isHub?14:d.depth===1?0:d.depth===2?10:4;
   if (!d.totalVol || range===0 || !nodes.length) return base;
   const peers = nodes.filter(n => d.isHub ? n.isHub : (n.depth===d.depth && !n.isHub));
@@ -518,11 +518,11 @@ const zoom=d3.zoom()
   });
 svg.call(zoom);
 
-// 초기 마인드맵: 오각형 레이아웃이 확장되었으므로, 전체를 조망할 수 있도록 0.18 배율로 줌아웃 세팅 (회장님 요청)
+// 초기 마인드맵: 레이아웃이 응축되었으므로(Compact), 0.45 배율로 꽉 차게 조망 (회장님 요청)
 const _gEl = document.getElementById('graph');
 const _gW = _gEl.clientWidth || 800;
 const _gH = _gEl.clientHeight || 600;
-svg.call(zoom.transform, d3.zoomIdentity.translate(_gW/2, _gH/2).scale(0.18).translate(-_gW/2, -_gH/2));
+svg.call(zoom.transform, d3.zoomIdentity.translate(_gW/2, _gH/2).scale(0.45).translate(-_gW/2, -_gH/2));
 
 function boundingForce() {
   const el=document.getElementById('graph');
@@ -573,11 +573,11 @@ function updateGraph() {
   const W=el.clientWidth||800, H=el.clientHeight||600;
   const CX=W/2, CY=H/2;
 
-  // ── PPT 레이아웃 수치 정의 (회장님 설계 반영) ─────────────────
-  const R_SUB      = 180;  // 1차 서브 노드 링 반경 (중앙 근처)
-  const R_HUB      = 800;  // 1차 핵심 허브 오각형 반경 (외곽)
-  const R_ORBIT2   = 90;   // 2차 노드 궤도 반경 (허브 중심)
-  const R_ORBIT3   = 175;  // 3차 노드 궤도 반경 (허브 중심)
+  // ── PPT 레이아웃 수치 정의 (응축된 Compact 버전) ──────────────
+  const R_SUB      = 130;  // 180 -> 130 (중앙 서브 밀착)
+  const R_HUB      = 450;  // 800 -> 450 (오각형 집단 밀착)
+  const R_ORBIT2   = 65;   // 90 -> 65 (집단 내부 밀착)
+  const R_ORBIT3   = 125;  // 175 -> 125 (집단 최외곽 밀착)
   // ────────────────────────────────────────────────────────────
 
   const nHubs = currentClusters.length || MAX_HUB;
@@ -1084,31 +1084,34 @@ window.addEventListener('resize',()=>{
 svg.call(zoom.transform,d3.zoomIdentity);
 renderGenderAge(null);
 
-// ── 마인드맵 전체화면 동작 ───────────────────────────────
+// ── 마인드맵 전체화면 동작 (Viewport CSS 기반으로 100% 신뢰성 확보) ─────────────────
 window.toggleFullscreen = function() {
   const outer = document.querySelector('.mindmap-outer');
   const fsBtn = document.getElementById('fs-btn');
   if(!outer) return;
 
-  if(!document.fullscreenElement) {
-    outer.requestFullscreen().catch(err => {
-      // 브라우저 샌드박스 등의 이유로 거부될 시 기존 클래스 방식 토글
-      outer.classList.toggle('fullscreen-mode');
-    });
+  // 네이티브 API의 불안정성을 배제하고 CSS 클래스 토글만으로 100% 작동 보장
+  const isCurrentlyFS = outer.classList.contains('fullscreen-mode');
+  
+  if(!isCurrentlyFS) {
+    outer.classList.add('fullscreen-mode');
+    if(fsBtn) fsBtn.textContent = '기본화면 ✖';
+    // 브라우저 기본 스크롤 차단
+    document.body.style.overflow = 'hidden';
   } else {
-    document.exitFullscreen();
+    outer.classList.remove('fullscreen-mode');
+    if(fsBtn) fsBtn.textContent = '전체화면 ⛶';
+    document.body.style.overflow = '';
   }
+  
+  // 레이아웃 재계산을 위해 리사이즈 이벤트 발생
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 150);
 };
 
-document.addEventListener('fullscreenchange', () => {
-  const outer = document.querySelector('.mindmap-outer');
-  const fsBtn = document.getElementById('fs-btn');
-  if (document.fullscreenElement) {
-    if(outer) outer.classList.add('fullscreen-mode');
-    if(fsBtn) fsBtn.textContent = '기본화면 ✖';
-  } else {
-    if(outer) outer.classList.remove('fullscreen-mode');
-    if(fsBtn) fsBtn.textContent = '전체화면 ⛶';
+// Esc 키로 탈출 가능하도록 추가
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const outer = document.querySelector('.mindmap-outer');
+    if (outer && outer.classList.contains('fullscreen-mode')) toggleFullscreen();
   }
-  setTimeout(() => window.dispatchEvent(new Event('resize')), 200);
 });
