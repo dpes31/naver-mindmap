@@ -341,8 +341,8 @@ function renderGenderAge(data) {
 // ── 노드 반경 (검색량 비례 — 같은 depth 내 log 스케일) ────
 // base: 역할별 기본 크기 / range: ±range 범위로 검색량 비례 변화
 function nodeRadius(d) {
-  const base  = d.depth===0?56:d.isHub?46:d.depth===1?22:d.depth===2?26:15;
-  const range = d.depth===0?0:d.isHub?20:d.depth===1?8:d.depth===2?12:6;
+  const base  = d.depth===0?70:d.isHub?38:d.depth===1?16:d.depth===2?20:12;
+  const range = d.depth===0?0:d.isHub?14:d.depth===1?0:d.depth===2?10:4;
   if (!d.totalVol || range===0 || !nodes.length) return base;
   const peers = nodes.filter(n => d.isHub ? n.isHub : (n.depth===d.depth && !n.isHub));
   const maxVol = Math.max(...peers.map(n=>n.totalVol), 1);
@@ -496,11 +496,11 @@ let isLoading=false;
 // ── 노드 색상 (역할별 플랫 — 글래스모피즘) ─────────────────
 function nodeFillColor(d) {
   if (d.depth===0) return ROOT_COLOR;
-  if (d.isHub)     return HUB_COLOR;
-  if (d.depth===1) return NON_HUB_COLOR;
+  if (d.isHub)     return CLUSTER_COLORS[(d.hubIdx || 0) % CLUSTER_COLORS.length]; // 자신을 감싸는 halo 라인과 정확히 일치하는 색상 부여
+  if (d.depth===1) return '#E2E8F0'; // 1차 서브: 시각적 혼선을 주지 않는 아주 연하고 조용한 회색
   if (d.depth===2) return D2_COLOR;
   if (d.depth===3) return D3_COLOR;
-  return NON_HUB_COLOR;
+  return '#E2E8F0';
 }
 function nodeGlowColor(d) { return nodeFillColor(d); }
 function nodeTextColor(d) {
@@ -514,10 +514,10 @@ function updateGraph() {
   const el=document.getElementById('graph');
   const W=el.clientWidth||800, H=el.clientHeight||600;
 
-  // 반경: 허브 링 / 2차 링 / 3차 링
-  const hubR  = Math.min(W,H)*0.19;
-  const d2R   = Math.min(W,H)*0.36;
-  const d3R   = Math.min(W,H)*0.48;
+  // 반경: 허브 링 / 2차 링 / 3차 링 (화면 크기를 더욱 작고 쫀쫀하게)
+  const hubR  = Math.min(W,H)*0.15;
+  const d2R   = Math.min(W,H)*0.28;
+  const d3R   = Math.min(W,H)*0.38;
 
   // 허브 각도: currentClusters.length 기준 pre-allocate
   // hubIdx(0~N-1)로 직접 접근하므로 배열 크기 = 실제 허브 수
