@@ -1,10 +1,9 @@
-// ── 설정 ──────────────────────────────────────────
 const ROOT_COLOR     = '#4F46E5';   // Apple System Indigo
 // 카테고리 halo 배경 색
 const CLUSTER_COLORS = ['#6366F1','#10B981','#F97316','#8B5CF6','#EC4899']; // Indigo, Emerald, Orange, Purple, Pink
 // 노드 fill 색 (역할별)
-const HUB_COLOR      = '#10B981';   // Emerald (허브)
-const NON_HUB_COLOR  = '#38BDF8';   // Light Blue (서브 연관)
+const HUB_COLOR      = '#10B981';   // Emerald (허브) 1차 핵심 연관 공통 컬러
+const NON_HUB_COLOR  = '#E2E8F0';   // Light Gray (1차 서브 연관 - 투명하게, 강조 안함)
 const D2_COLOR       = '#FBBF24';   // Amber (2차)
 const D3_COLOR       = '#CBD5E1';   // Slate 300 (3차)
 
@@ -292,7 +291,7 @@ function renderGenderAge(data) {
       </div>
       <div class="gender-device-wrap">
         <div class="gender-device-col">
-          <div class="gender-device-title">PC</div>
+          <div class="gender-device-title">💻 PC</div>
           <div class="gender-device-bar">
             <div class="gender-device-seg male" style="width:${g.malePc}%"></div>
             <div class="gender-device-seg female" style="width:${g.femalePc}%"></div>
@@ -303,7 +302,7 @@ function renderGenderAge(data) {
           </div>
         </div>
         <div class="gender-device-col">
-          <div class="gender-device-title">Mobile</div>
+          <div class="gender-device-title">📱 Mobile</div>
           <div class="gender-device-bar">
             <div class="gender-device-seg male" style="width:${g.maleMo}%"></div>
             <div class="gender-device-seg female" style="width:${g.femaleMo}%"></div>
@@ -482,7 +481,7 @@ function boundingForce() {
 
 const simulation=d3.forceSimulation()
   .force('link',d3.forceLink().id(d=>d.id).distance(32).strength(0.45))
-  .force('charge',d3.forceManyBody().strength(d=>d.depth===0?-420:d.isHub?-240:d.depth===3?-65:-120).distanceMax(340))
+  .force('charge',d3.forceManyBody().strength(d=>d.depth===0?-100:d.isHub?-100:d.depth===3?-30:-50).distanceMax(200))
   .force('center',d3.forceCenter(400,300))
   .force('collision',d3.forceCollide().radius(d=>nodeRadius(d)+8))
   .force('bounds',boundingForce)
@@ -496,11 +495,11 @@ let isLoading=false;
 // ── 노드 색상 (역할별 플랫 — 글래스모피즘) ─────────────────
 function nodeFillColor(d) {
   if (d.depth===0) return ROOT_COLOR;
-  if (d.isHub)     return CLUSTER_COLORS[(d.hubIdx || 0) % CLUSTER_COLORS.length]; // 자신을 감싸는 halo 라인과 정확히 일치하는 색상 부여
-  if (d.depth===1) return '#E2E8F0'; // 1차 서브: 시각적 혼선을 주지 않는 아주 연하고 조용한 회색
+  if (d.isHub)     return HUB_COLOR; // 1차 허브는 1개의 고정 색상(초록색)으로 통일
+  if (d.depth===1) return NON_HUB_COLOR; 
   if (d.depth===2) return D2_COLOR;
   if (d.depth===3) return D3_COLOR;
-  return '#E2E8F0';
+  return NON_HUB_COLOR;
 }
 function nodeGlowColor(d) { return nodeFillColor(d); }
 function nodeTextColor(d) {
@@ -514,10 +513,8 @@ function updateGraph() {
   const el=document.getElementById('graph');
   const W=el.clientWidth||800, H=el.clientHeight||600;
 
-  // 반경: 허브 링 / 2차 링 / 3차 링 (화면 크기를 더욱 작고 쫀쫀하게)
-  const hubR  = Math.min(W,H)*0.15;
-  const d2R   = Math.min(W,H)*0.28;
-  const d3R   = Math.min(W,H)*0.38;
+  // 반경: 카테고리별 영역이 배타적으로 구분되도록 허브를 화면 전체에 넓게 배치
+  const hubR  = Math.max(W, H) * 0.28; // 허브들을 중심에서 배타적으로 멀리 분리
 
   // 허브 각도: currentClusters.length 기준 pre-allocate
   // hubIdx(0~N-1)로 직접 접근하므로 배열 크기 = 실제 허브 수
@@ -537,8 +534,9 @@ function updateGraph() {
     const ms=memberMap[key]||[];
     const idx=ms.indexOf(n.id), cnt=ms.length;
     if(cnt<=1) return 0;
-    const spread=n.depth===2?(Math.PI/180*32):(Math.PI/180*18);
-    return (idx/(cnt-1)-0.5)*2*spread;
+    // 허브 중심을 기준으로 바깥쪽으로 부채꼴 형태로만 퍼지게 각도 제한 (배타적 구역 형성)
+    const spread=n.depth===2?(Math.PI/180*60):(Math.PI/180*80);
+    return (idx/(cnt-1)-0.5)*spread;
   }
 
   // 1차 서브 연관(허브가 아닌) 노드들을 위한 내부 링 계산
@@ -546,29 +544,38 @@ function updateGraph() {
   const innerAngles = {};
   nonHubs.forEach((n, i) => { innerAngles[n.id] = (i / nonHubs.length) * 2 * Math.PI; });
 
-  // 목표 좌표
+  // 목표 좌표: 2, 3차 키워드들을 중앙이 아닌 '자신의 허브 부모' 곁으로만 강하게 종속시킴
   function tx(n) {
     if(n.depth===0) return W/2;
-    if(n.isHub) return W/2+Math.cos(hubAngles[n.hubIdx])*hubR*1.1; // 허브 반경 약간 확대
-    if(n.depth===1) return W/2 + Math.cos(innerAngles[n.id]) * (hubR * 0.55); // 명확한 내부 링
+    if(n.isHub) return W/2 + Math.cos(hubAngles[n.hubIdx])*hubR;
+    if(n.depth===1) return W/2 + Math.cos(innerAngles[n.id]) * (hubR * 0.40);
     if(n.hubIdx==null) return W/2;
-    const ang=hubAngles[n.hubIdx]+angleOffset(n);
-    return W/2+Math.cos(ang)*(n.depth===2?d2R*1.05:d3R*0.95);
+    
+    // 부모 허브의 좌표를 기점으로 방사형 거리를 둠 (절대 다른 허브 구역을 침범하지 않음)
+    const baseAng = hubAngles[n.hubIdx];
+    const offAng = angleOffset(n);
+    const localR = n.depth===2 ? 80 : 130; // 허브와의 로컬 거리
+    const cx = W/2 + Math.cos(baseAng)*hubR; 
+    return cx + Math.cos(baseAng + offAng) * localR;
   }
   function ty(n) {
     if(n.depth===0) return H/2;
-    if(n.isHub) return H/2+Math.sin(hubAngles[n.hubIdx])*hubR*1.1;
-    if(n.depth===1) return H/2 + Math.sin(innerAngles[n.id]) * (hubR * 0.55);
+    if(n.isHub) return H/2 + Math.sin(hubAngles[n.hubIdx])*hubR;
+    if(n.depth===1) return H/2 + Math.sin(innerAngles[n.id]) * (hubR * 0.40);
     if(n.hubIdx==null) return H/2;
-    const ang=hubAngles[n.hubIdx]+angleOffset(n);
-    return H/2+Math.sin(ang)*(n.depth===2?d2R*1.05:d3R*0.95);
+    
+    const baseAng = hubAngles[n.hubIdx];
+    const offAng = angleOffset(n);
+    const localR = n.depth===2 ? 80 : 130; 
+    const cy = H/2 + Math.sin(baseAng)*hubR;
+    return cy + Math.sin(baseAng + offAng) * localR;
   }
   function forceStr(n) {
-    if(n.depth===0) return 0;
-    if(n.isHub)     return 0.95;
-    if(n.depth===1) return 0.85;   // 비허브 1차 노드의 위치를 강하게 고정하여 이탈 및 누락 방지
-    if(n.depth===2) return 0.85;
-    if(n.depth===3) return 0.78;
+    if(n.depth===0) return 0.6;
+    if(n.isHub)     return 1.0; // 흔들리지 않는 뿌리 고정
+    if(n.depth===1) return 0.95;
+    if(n.depth===2) return 0.95; // 부모 곁에 강제 고정
+    if(n.depth===3) return 0.95; // 부모 곁에 강제 고정
     return 0;
   }
 
