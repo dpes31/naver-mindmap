@@ -448,6 +448,10 @@ makeGradient('grad-d3', D3_COLOR, 0.80);
 DEPTH_COLORS.forEach((c,i)=>makeGradient(`grad-${i}`,c,DEPTH_OPACITY[i]));
 
 const zoomG=svg.append('g').attr('id','zoom-layer');
+const halosG=zoomG.append('g').attr('id','halos');
+const linksG=zoomG.append('g').attr('id','links');
+const nodesG=zoomG.append('g').attr('id','nodes');
+
 const zoom=d3.zoom()
   .scaleExtent([0.2, 3])
   .wheelDelta(e => -e.deltaY * (e.deltaMode === 1 ? 0.05 : e.deltaMode ? 1 : 0.001)) // 스크롤 줌 부드럽고 촘촘하게 튜닝
@@ -459,11 +463,10 @@ const zoom=d3.zoom()
 svg.call(zoom);
 
 // 초기 마인드맵 더 작게 시작하여 전체 뷰가 한 눈에 쾌적하게 잡히도록 0.7 배율 세팅
-svg.call(zoom.transform, d3.zoomIdentity.translate(W/2, H/2).scale(0.7).translate(-W/2, -H/2));
-
-const halosG=zoomG.append('g').attr('id','halos');
-const linksG=zoomG.append('g').attr('id','links');
-const nodesG=zoomG.append('g').attr('id','nodes');
+const _gEl = document.getElementById('graph');
+const _gW = _gEl.clientWidth || 800;
+const _gH = _gEl.clientHeight || 600;
+svg.call(zoom.transform, d3.zoomIdentity.translate(_gW/2, _gH/2).scale(0.7).translate(-_gW/2, -_gH/2));
 
 function boundingForce() {
   const el=document.getElementById('graph');
@@ -817,7 +820,10 @@ function downloadExcel() {
 async function collectAll(rootKeyword, rootId, prefetchedRoot) {
   const barEl=document.getElementById('progress-bar');
   const progEl=document.getElementById('loading-progress');
-  function prog(pct,text){if(barEl)barEl.style.width=pct+'%';if(progEl)progEl.textContent=text;}
+  function prog(pct,text){
+    if(barEl) barEl.style.width=pct+'%';
+    if(progEl) progEl.innerHTML=`<span style="font-weight:700; color:#4F46E5;">${Math.round(pct)}%</span> - ${text}`;
+  }
 
   prog(10,'키워드 스코어링...');
 
