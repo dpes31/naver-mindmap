@@ -19,6 +19,13 @@ const MAX_LINKS_SHOW = 120; // 60 -> 120 (연결선 가독성 범위 확대)
 const MAX_DEPTH      = 3;
 let currentClusters  = [];
 let currentKeyword   = '';
+
+// ── DOM 요소 선언 (누락된 변수 정의) ──────────────────
+const infoPanelEl = document.getElementById('info-panel');
+const emptyState  = document.getElementById('empty-state');
+const tooltipEl   = document.getElementById('tooltip');
+// ──────────────────────────────────────────────────
+
 function updateProgress(pct, msg) {
   const pbar = document.getElementById('progress-bar');
   const pt = document.getElementById('loading-progress');
@@ -991,8 +998,10 @@ async function startSearch(keyword) {
   // 상태 초기화
   nodes=[];links=[];nodeIds.clear();currentClusters=[];
   halosG.selectAll('*').remove();linksG.selectAll('*').remove();nodesG.selectAll('*').remove();
-  infoPanelEl.classList.remove('visible');
-  emptyState.classList.add('hidden');
+  
+  if(infoPanelEl) infoPanelEl.classList.remove('visible');
+  if(emptyState) emptyState.classList.add('hidden');
+  
   document.getElementById('kw-cards').innerHTML='';
   document.getElementById('trend-chart').innerHTML='';
 
