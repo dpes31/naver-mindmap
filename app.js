@@ -518,12 +518,11 @@ const zoom=d3.zoom()
   });
 svg.call(zoom);
 
-// 초기 마인드맵: 마인드맵 카테고리끼리 겹치지 않게 확장되었으므로, 화면에 다 들어오도록 PC 0.42, 모바일 0.22 배율 세팅
+// 초기 마인드맵: 오각형 레이아웃이 확장되었으므로, 전체를 조망할 수 있도록 0.18 배율로 줌아웃 세팅 (회장님 요청)
 const _gEl = document.getElementById('graph');
 const _gW = _gEl.clientWidth || 800;
 const _gH = _gEl.clientHeight || 600;
-const _isMo = window.innerWidth <= 768;
-svg.call(zoom.transform, d3.zoomIdentity.translate(_gW/2, _gH/2).scale(_isMo ? 0.15 : 0.28).translate(-_gW/2, -_gH/2));
+svg.call(zoom.transform, d3.zoomIdentity.translate(_gW/2, _gH/2).scale(0.18).translate(-_gW/2, -_gH/2));
 
 function boundingForce() {
   const el=document.getElementById('graph');
@@ -543,8 +542,8 @@ const simulation=d3.forceSimulation()
   .force('center',d3.forceCenter(400,300))
   .force('collision',d3.forceCollide().radius(d=>nodeRadius(d)+8))
   .force('bounds',boundingForce)
-  .alphaDecay(0.016)
-  .velocityDecay(0.28);
+  .alphaDecay(0.02) // 약간 더 빨리 안정화
+  .velocityDecay(0.4); // 흐느적거림 방지 (더 단단한 느낌)
 
 let nodes=[],links=[];
 const nodeIds=new Set();
@@ -573,8 +572,8 @@ function updateGraph() {
   const el=document.getElementById('graph');
   const W=el.clientWidth||800, H=el.clientHeight||600;
 
-  // 반경: 카테고리별 영역을 대폭 넓혀 자식 노드들이 충분한 240px 반경 안에 거주하도록 공간을 분리함
-  const hubR  = Math.max(W, H) * 0.55;
+  // 반경: 카테고리별 영역(240px)이 서로 절대 중첩되지 않도록 허브 중심 거리를 충분히 확장 (850px)
+  const hubR  = 850; 
 
   const nHubs = currentClusters.length || MAX_HUB;
   // 정오각형(Pentagonal) 고정 배치: 360/5 = 72도 간격
@@ -595,10 +594,16 @@ function updateGraph() {
     return (idx / cnt) * 2 * Math.PI;
   }
 
-  const nonHubs = nodes.filter(n => n.depth === 1 && !n.isHub);
-  const innerAngles = {};
   // 1차 서브 키워드: 중앙 루트 주변에 방사형(Radial)으로 고르게 배치
   nonHubs.forEach((n, i) => { innerAngles[n.id] = (i / nonHubs.length) * 2 * Math.PI; });
+
+  // 1차 핵심(Hubs) 좌표 고정 (fx, fy) — 물리 시뮬레이션에서 이탈 방지
+  nodes.forEach(n => {
+    if (n.isHub && n.hubIdx != null) {
+      n.fx = W/2 + Math.cos(hubAngles[n.hubIdx]) * hubR;
+      n.fy = H/2 + Math.sin(hubAngles[n.hubIdx]) * hubR;
+    }
+  });
 
   function tx(n) {
     if(n.depth===0) return W/2;
@@ -637,14 +642,14 @@ function updateGraph() {
   }
 
   // ── 클러스터 내 구속 물리 엔진 (Containment Force) ─────────────────────
-  // 각 2차, 3차 노드가 자신의 부모 허브(Halo)를 벗어나지 못하도록 강제함
+  // 각 2차, 3차 노드가 자신의 부모 허브(Halo)를 벗어나지 못하도록 물리적으로 강제함
   function clusterContainmentForce(alpha) {
-    const haloR = 240; // index.html/renderHalos와 동일한 기준
-    const margin = 30; // 외곽선에서 안쪽으로의 여백
+    const haloR = 240; 
+    const margin = 20; // 30 -> 20으로 안쪽 공간 확보 최적화
     nodes.forEach(n => {
       if (n.depth < 2 || n.hubIdx == null) return;
       const hub = nodes.find(h => h.isHub && h.hubIdx === n.hubIdx);
-      if (!hub) return;
+      if (!hub || hub.x == null) return;
       
       const dx = n.x - hub.x;
       const dy = n.y - hub.y;
@@ -653,12 +658,11 @@ function updateGraph() {
 
       if (dist > maxD) {
         const ratio = maxD / dist;
-        // 위치를 즉시 교정하여 영역 밖으로 나가는 것을 물리적으로 차단
+        // 위치 강제 보정 및 속도 무효화 (튕겨나가는 현상 방지)
         n.x = hub.x + dx * ratio;
         n.y = hub.y + dy * ratio;
-        // 속도 역시 허브 방향으로 중화
-        n.vx *= 0.5;
-        n.vy *= 0.5;
+        n.vx = 0;
+        n.vy = 0;
       }
     });
   }
@@ -667,9 +671,9 @@ function updateGraph() {
     .force('clusterX', d3.forceX(tx).strength(forceStr))
     .force('clusterY', d3.forceY(ty).strength(forceStr))
     .force('containment', clusterContainmentForce)
-    // 반발력을 노드 중요도(depth)에 따라 차등 분배하여 뭉침 방지
-    .force('charge', d3.forceManyBody().strength(d => d.depth === 0 ? -120 : d.isHub ? -100 : -60).distanceMax(300))
-    .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + (d.depth === 3 ? 18 : 22)))
+    // 반발력을 노드 중요도(depth)에 따라 최적화 (2,3차 노드들이 밀려나지 않게 조정)
+    .force('charge', d3.forceManyBody().strength(d => d.depth === 0 ? -120 : d.isHub ? -100 : -25).distanceMax(250))
+    .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + (d.depth === 3 ? 12 : 16)).strength(0.8))
     .force('center', d3.forceCenter(W/2, H/2))
     .force('radial', null);
 
