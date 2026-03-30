@@ -594,6 +594,8 @@ function updateGraph() {
     return (idx / cnt) * 2 * Math.PI;
   }
 
+  const nonHubs = nodes.filter(n => n.depth === 1 && !n.isHub);
+  const innerAngles = {};
   // 1차 서브 키워드: 중앙 루트 주변에 방사형(Radial)으로 고르게 배치
   nonHubs.forEach((n, i) => { innerAngles[n.id] = (i / nonHubs.length) * 2 * Math.PI; });
 
