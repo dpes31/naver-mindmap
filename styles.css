@@ -390,13 +390,18 @@ header.hidden { display: none; }
 .mm-fs-btn:hover { background: #10B981; color: #fff; border-color: #10B981; }
 
 .mindmap-outer.fullscreen-mode {
-  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-  z-index: 10000; margin: 0; background: var(--bg-body);
-  display: flex; flex-direction: column;
+  position: fixed !important; 
+  top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+  width: 100vw !important; height: 100vh !important;
+  z-index: 999999 !important; 
+  margin: 0 !important; 
+  background: #fff !important;
+  display: flex !important; flex-direction: column !important;
 }
-.mindmap-outer.fullscreen-mode .mindmap-margin { display: none; }
+.mindmap-outer.fullscreen-mode .mindmap-margin { display: none !important; }
 .mindmap-outer.fullscreen-mode .mindmap-content-wrap {
-  flex: 1; border-radius: 0; box-shadow: none; border: none; height: 100%;
+  flex: 1 !important; border-radius: 0 !important; box-shadow: none !important; border: none !important;
+  height: 100% !important; width: 100% !important;
 }
 .mindmap-content {
   flex: 1; position: relative; overflow: hidden; min-height: 0;
