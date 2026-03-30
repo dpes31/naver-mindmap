@@ -7,7 +7,7 @@ const D2_COLOR       = '#FBBF24';   // Amber (2차)
 const D3_COLOR       = '#E2E8F0';   // Light Gray (3차 - 시각적 구분 명확화)
 
 // 레전드용
-const DEPTH_COLORS   = [ROOT_COLOR, HUB_COLOR, D2_COLOR, D3_COLOR];
+const DEPTH_COLORS   = [ROOT_COLOR, '#10B981', D2_COLOR, D3_COLOR];
 const DEPTH_OPACITY  = [1, 1, 1, 1];
 
 const MAX_HUB        = 5;
