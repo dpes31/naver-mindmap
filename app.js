@@ -12,10 +12,10 @@ const DEPTH_COLORS   = [ROOT_COLOR, HUB_COLOR, NON_HUB_COLOR, D2_COLOR, D3_COLOR
 const DEPTH_OPACITY  = [1, 1, 1, 1, 1];
 
 const MAX_HUB        = 5;
-const MAX_D1         = 9;
-const MAX_D2_PER     = 5;
-const MAX_D3_PER     = 2;
-const MAX_LINKS_SHOW = 60;
+const MAX_D1         = 12; // 9 -> 12로 상향 (중앙 방사형 풍성하게)
+const MAX_D2_PER     = 8;  // 5 -> 8로 상향 (허브당 2차 노드 증가)
+const MAX_D3_PER     = 5;  // 2 -> 5로 상향 (허브당 3차 노드 대폭 증가)
+const MAX_LINKS_SHOW = 120; // 60 -> 120 (연결선 가독성 범위 확대)
 const MAX_DEPTH      = 3;
 let currentClusters  = [];
 let currentKeyword   = '';
@@ -532,10 +532,6 @@ const simulation=d3.forceSimulation()
 let nodes=[],links=[];
 const nodeIds=new Set();
 let isLoading=false;
-// ── 전역 DOM 참조 (누락 시 startSearch ReferenceError 발생) ──
-const tooltipEl    = document.getElementById('info-panel');
-const infoPanelEl  = document.getElementById('info-panel');
-const emptyState   = document.getElementById('empty-state');
 
 // ── 노드 색상 (역할별 플랫) ─────────────────
 function nodeFillColor(d) {
@@ -564,6 +560,7 @@ function updateGraph() {
   const hubR  = Math.max(W, H) * 0.55;
 
   const nHubs = currentClusters.length || MAX_HUB;
+  // 정오각형(Pentagonal) 고정 배치: 360/5 = 72도 간격
   const hubAngles = Array.from({length:nHubs}, (_,i)=>(i/nHubs)*2*Math.PI - Math.PI/2);
 
   const memberMap={};
@@ -577,43 +574,48 @@ function updateGraph() {
     const key=`${n.hubIdx}-${n.depth}`;
     const ms=memberMap[key]||[];
     const idx=ms.indexOf(n.id), cnt=ms.length;
-    if(cnt<=1) return 0;
-    const spread=n.depth===2?(Math.PI/180*60):(Math.PI/180*80);
-    return (idx/(cnt-1)-0.5)*spread;
+    // 360도 전 방향으로 골고루 분산 배치
+    return (idx / cnt) * 2 * Math.PI;
   }
 
   const nonHubs = nodes.filter(n => n.depth === 1 && !n.isHub);
   const innerAngles = {};
+  // 1차 서브 키워드: 중앙 루트 주변에 방사형(Radial)으로 고르게 배치
   nonHubs.forEach((n, i) => { innerAngles[n.id] = (i / nonHubs.length) * 2 * Math.PI; });
 
   function tx(n) {
     if(n.depth===0) return W/2;
+    // 1차 핵심(Hubs): 고정된 오각형 정점에 배치
     if(n.isHub) return W/2 + Math.cos(hubAngles[n.hubIdx])*hubR;
-    if(n.depth===1) return W/2 + Math.cos(innerAngles[n.id]) * (hubR * 0.35);
+    // 1차 서브: 중앙 노드 주변 근거리에 방사형 배치
+    if(n.depth===1) return W/2 + Math.cos(innerAngles[n.id]) * (hubR * 0.3);
     if(n.hubIdx==null) return W/2;
+    
+    // 2~3차: 부모 허브를 중심으로 하는 동심원(Concentric Orbits) 배치
     const hub = nodes.find(h => h.isHub && h.hubIdx === n.hubIdx);
-    const hx = hub && hub.x != null && !isNaN(hub.x) ? hub.x : (W/2 + Math.cos(hubAngles[n.hubIdx])*hubR);
-    const offAng = angleOffset(n);
-    const localR = n.depth===2 ? 60 : 120; // 80->60, 160->120으로 반경 축소 (Containment 강화)
-    return hx + Math.cos(hubAngles[n.hubIdx] + offAng) * localR;
+    const hx = (hub && hub.x != null && !isNaN(hub.x)) ? hub.x : (W/2 + Math.cos(hubAngles[n.hubIdx])*hubR);
+    const localR = n.depth===2 ? 90 : 170; // 1차핵심 주변 90px(2차), 그 너머 170px(3차)
+    const ang = angleOffset(n);
+    return hx + Math.cos(ang) * localR;
   }
   function ty(n) {
     if(n.depth===0) return H/2;
     if(n.isHub) return H/2 + Math.sin(hubAngles[n.hubIdx])*hubR;
-    if(n.depth===1) return H/2 + Math.sin(innerAngles[n.id]) * (hubR * 0.35);
+    if(n.depth===1) return H/2 + Math.sin(innerAngles[n.id]) * (hubR * 0.3);
     if(n.hubIdx==null) return H/2;
+    
     const hub = nodes.find(h => h.isHub && h.hubIdx === n.hubIdx);
-    const hy = hub && hub.y != null && !isNaN(hub.y) ? hub.y : (H/2 + Math.sin(hubAngles[n.hubIdx])*hubR);
-    const offAng = angleOffset(n);
-    const localR = n.depth===2 ? 60 : 120;
-    return hy + Math.sin(hubAngles[n.hubIdx] + offAng) * localR;
+    const hy = (hub && hub.y != null && !isNaN(hub.y)) ? hub.y : (H/2 + Math.sin(hubAngles[n.hubIdx])*hubR);
+    const localR = n.depth===2 ? 90 : 170;
+    const ang = angleOffset(n);
+    return hy + Math.sin(ang) * localR;
   }
   function forceStr(n) {
-    if(n.depth===0) return 0.6;
-    if(n.isHub)     return 1.0; 
-    if(n.depth===1) return 0.95;
-    if(n.depth===2) return 1.1; 
-    if(n.depth===3) return 1.1; 
+    if(n.depth===0) return 0.8;
+    if(n.isHub)     return 1.1; // 허브는 강력하게 고정
+    if(n.depth===1) return 0.9;
+    if(n.depth===2) return 1.2; // 2,3차는 동심원 궤도에 강하게 부착
+    if(n.depth===3) return 1.2; 
     return 0;
   }
 
@@ -648,6 +650,10 @@ function updateGraph() {
     .force('clusterX', d3.forceX(tx).strength(forceStr))
     .force('clusterY', d3.forceY(ty).strength(forceStr))
     .force('containment', clusterContainmentForce)
+    // 반발력을 노드 중요도(depth)에 따라 차등 분배하여 뭉침 방지
+    .force('charge', d3.forceManyBody().strength(d => d.depth === 0 ? -120 : d.isHub ? -100 : -60).distanceMax(300))
+    .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + (d.depth === 3 ? 18 : 22)))
+    .force('center', d3.forceCenter(W/2, H/2))
     .force('radial', null);
 
   // 링크 (강도 상위 MAX_LINKS_SHOW개)
@@ -679,7 +685,7 @@ function updateGraph() {
             const hx = hub.x, hy = hub.y;
             const tdx = e.x - hx, tdy = e.y - hy;
             const dist = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
-            const maxD = 210; // Halo 240px 내에 머물도록 드래그 시에도 구속
+            const maxD = 230; // Halo 240px 내에 머물도록 드래그 시에도 구속
             if (dist > maxD) {
               const ratio = maxD / dist;
               d.fx = hx + tdx * ratio;
@@ -773,11 +779,7 @@ function updateGraph() {
 
   simulation.nodes(nodes);
   simulation.force('link').links(links);
-  // 링크 거리 장력(Tension)을 극단적으로 줄이거나 무력화하여, 
-  // 물리엔진이 clusterX/Y의 목표 좌표(tx/ty) 배치 계획을 망치거나 당기지 못하게 설정.
   simulation.force('link').strength(0.01);
-  simulation.force('collision').radius(d=>nodeRadius(d)+(d.depth===0?26:d.isHub?20:d.depth===1?14:d.depth===2?13:10));
-  simulation.force('center',d3.forceCenter(W/2,H/2));
   simulation.alpha(0.75).restart();
 
   linksG.selectAll('path.link-path')
@@ -787,9 +789,10 @@ function updateGraph() {
   let tickCount=0;
   simulation.on('tick',()=>{
     linksG.selectAll('path.link-path').attr('d',d=>{
-      const sx=d.source.x,sy=d.source.y,tx=d.target.x,ty=d.target.y;
-      const dx=tx-sx,dy=ty-sy,len=Math.sqrt(dx*dx+dy*dy)||1;
-      const ox=-dy/len*len*0.14, oy=dx/len*len*0.14;
+      const sx=d.source.x, sy=d.source.y, tx=d.target.x, ty=d.target.y;
+      if (isNaN(sx) || isNaN(sy) || isNaN(tx) || isNaN(ty)) return '';
+      const dx=tx-sx, dy=ty-sy, len=Math.sqrt(dx*dx+dy*dy)||1;
+      const ox=-dy/len*len*0.12, oy=dx/len*len*0.12;
       const mx=(sx+tx)/2+ox, my=(sy+ty)/2+oy;
       return `M${sx.toFixed(1)},${sy.toFixed(1)} Q${mx.toFixed(1)},${my.toFixed(1)} ${tx.toFixed(1)},${ty.toFixed(1)}`;
     });
@@ -884,7 +887,8 @@ svg.on('click', () => {
 });
 
 async function collectAll(rootKeyword, rootId, firstLevel) {
-  const validLevel = firstLevel.filter(d => d.totalVol > 0);
+  // 회장님 요청: 검색량 0인 키워드도 유효 데이터로 포함하여 풍성하게 구성
+  const validLevel = firstLevel; 
   updateProgress(15, '핵심 연관어 분석 중...');
   
   const hubs = validLevel.slice(0, MAX_HUB);
@@ -912,8 +916,8 @@ async function collectAll(rootKeyword, rootId, firstLevel) {
   updateProgress(30, '허브 클러스터 확장 중...');
   const d2Promises = hubs.map(async (hub, idx) => {
     const arr = await fetchNaverKeywords(hub.keyword);
-    // 각각의 허브 완료 시마다 프로그레스 미세 조정 (선택적)
-    const filtered = arr.filter(x => x.keyword.toLowerCase() !== hub.keyword.toLowerCase() && x.keyword.toLowerCase() !== rootId && x.totalVol > 0);
+    // 필터 완화: 0인 경우도 포함
+    const filtered = arr.filter(x => x.keyword.toLowerCase() !== hub.keyword.toLowerCase() && x.keyword.toLowerCase() !== rootId);
     return { hubId: hub.keyword.toLowerCase(), hubIdx: idx, list: filtered.slice(0, MAX_D2_PER) };
   });
 
@@ -935,7 +939,8 @@ async function collectAll(rootKeyword, rootId, firstLevel) {
 
   const d3Promises = d3Candidates.map(async (cand) => {
     const arr = await fetchNaverKeywords(cand.keyword);
-    const filtered = arr.filter(x => !nodeIds.has(x.keyword.toLowerCase()) && x.keyword.toLowerCase() !== rootId && x.totalVol > 0);
+    // 필터 완화: 0인 경우도 포함
+    const filtered = arr.filter(x => !nodeIds.has(x.keyword.toLowerCase()) && x.keyword.toLowerCase() !== rootId);
     return { parentId: cand.id, hubIdx: cand.hubIdx, list: filtered.slice(0, MAX_D3_PER) };
   });
 
@@ -1070,10 +1075,6 @@ document.getElementById('headerInput').addEventListener('keydown',e=>{
 });
 const copyTrendBtn=document.getElementById('copy-trend-btn');
 if(copyTrendBtn) copyTrendBtn.addEventListener('click',copyTrendData);
-function downloadExcel() {
-  if(!nodes.length){showToast('데이터가 없습니다');return;}
-  showToast('다운로드 기능은 준비 중입니다');
-}
 const dlBtn=document.getElementById('download-btn');
 if(dlBtn) dlBtn.addEventListener('click',downloadExcel);
 window.addEventListener('resize',()=>{
