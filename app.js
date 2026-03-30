@@ -1,12 +1,12 @@
 // ── 설정 ──────────────────────────────────────────
-const ROOT_COLOR     = '#1E40AF';   // 검색어 노드 (타이틀 파란색)
-// 카테고리 halo 배경 색 (초록 계열 제외 — HUB 딥그린과 겹침 방지)
-const CLUSTER_COLORS = ['#3b82f6','#f59e0b','#ec4899','#8b5cf6','#06b6d4'];
+const ROOT_COLOR     = '#007AFF';   // Apple System Blue
+// 카테고리 halo 배경 색
+const CLUSTER_COLORS = ['#007AFF','#34C759','#FF9500','#AF52DE','#FF2D55']; // Blue, Green, Orange, Purple, Pink
 // 노드 fill 색 (역할별)
-const HUB_COLOR      = '#166534';   // TOP5 허브 1차 (딥 그린)
-const NON_HUB_COLOR  = '#a5b4fc';   // 1차 서브 연관 (연 인디고)
-const D2_COLOR       = '#fbbf24';   // 2차 연관 (노란색/앰버)
-const D3_COLOR       = '#94a3b8';   // 3차 연관 (회색)
+const HUB_COLOR      = '#34C759';   // Apple System Green (허브)
+const NON_HUB_COLOR  = '#5AC8FA';   // Apple System Light Blue (서브 연관)
+const D2_COLOR       = '#FFCC00';   // Apple System Yellow (2차)
+const D3_COLOR       = '#8E8E93';   // Apple System Gray (3차)
 
 // 레전드용
 const DEPTH_COLORS   = [ROOT_COLOR, HUB_COLOR, D2_COLOR, D3_COLOR];
@@ -433,6 +433,18 @@ const softBlur=defs.append('filter').attr('id','soft-blur')
   .attr('x','-120%').attr('y','-120%').attr('width','340%').attr('height','340%');
 softBlur.append('feGaussianBlur').attr('stdDeviation','14');
 
+// 프리미엄 유리 구슬(Glass Orb) 필터 (빛 반사 하이라이트 추가)
+const glassOrb = defs.append('filter').attr('id','glass-orb').attr('x','-20%').attr('y','-20%').attr('width','140%').attr('height','140%');
+glassOrb.append('feGaussianBlur').attr('in','SourceAlpha').attr('stdDeviation','2').attr('result','blur');
+const spec = glassOrb.append('feSpecularLighting')
+  .attr('in','blur').attr('surfaceScale','4').attr('specularConstant','0.8')
+  .attr('specularExponent','25').attr('lighting-color','#ffffff').attr('result','specOut');
+spec.append('fePointLight').attr('x','-30').attr('y','-30').attr('z','80');
+glassOrb.append('feComposite').attr('in','specOut').attr('in2','SourceAlpha').attr('operator','in').attr('result','specOut');
+const fb = glassOrb.append('feMerge');
+fb.append('feMergeNode').attr('in','SourceGraphic');
+fb.append('feMergeNode').attr('in','specOut');
+
 function lighten(hex,a) {
   const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
   return `rgb(${Math.min(255,Math.round(r+(255-r)*a))},${Math.min(255,Math.round(g+(255-g)*a))},${Math.min(255,Math.round(b+(255-b)*a))})`;
@@ -463,13 +475,13 @@ const nodesG=zoomG.append('g').attr('id','nodes');
 
 function boundingForce() {
   const el=document.getElementById('graph');
-  const W=el.clientWidth||800, H=el.clientHeight||600, pad=60;
+  const W=el.clientWidth||800, H=el.clientHeight||600, pad=100;
   nodes.forEach(n=>{
     if(n.depth===0) return;
-    if(n.x<pad)    n.vx+=(pad-n.x)*0.12;
-    if(n.x>W-pad)  n.vx+=(W-pad-n.x)*0.12;
-    if(n.y<pad)    n.vy+=(pad-n.y)*0.12;
-    if(n.y>H-pad)  n.vy+=(H-pad-n.y)*0.12;
+    if(n.x<pad)    n.vx+=(pad-n.x)*0.4;
+    if(n.x>W-pad)  n.vx+=(W-pad-n.x)*0.4;
+    if(n.y<pad)    n.vy+=(pad-n.y)*0.4;
+    if(n.y>H-pad)  n.vy+=(H-pad-n.y)*0.4;
   });
 }
 
@@ -497,10 +509,10 @@ function nodeFillColor(d) {
 }
 function nodeGlowColor(d) { return nodeFillColor(d); }
 function nodeTextColor(d) {
-  if (d.depth===0 || d.isHub) return '#ffffff';
-  if (d.depth===1) return '#3730a3';  // 연 인디고 위 → 진한 인디고 텍스트
-  if (d.depth===2) return '#78350f';  // 노란색 위 → 진한 갈색 텍스트
-  return '#475569';                   // 3차 회색
+  if (d.depth===0 || d.isHub || d.depth===3) return '#ffffff';
+  if (d.depth===1) return '#003366';  // Light Blue 위 → Dark Blue
+  if (d.depth===2) return '#664d00';  // Yellow 위 → Dark Brown
+  return '#1d1d1f';
 }
 
 // ── 그래프 렌더 ───────────────────────────────────────
@@ -535,29 +547,34 @@ function updateGraph() {
     return (idx/(cnt-1)-0.5)*2*spread;
   }
 
+  // 1차 서브 연관(허브가 아닌) 노드들을 위한 내부 링 계산
+  const nonHubs = nodes.filter(n => n.depth === 1 && !n.isHub);
+  const innerAngles = {};
+  nonHubs.forEach((n, i) => { innerAngles[n.id] = (i / nonHubs.length) * 2 * Math.PI; });
+
   // 목표 좌표
   function tx(n) {
     if(n.depth===0) return W/2;
-    if(n.isHub) return W/2+Math.cos(hubAngles[n.hubIdx])*hubR;
-    if(n.depth===1) return W/2;  // 비허브 1차: 중심 근처
+    if(n.isHub) return W/2+Math.cos(hubAngles[n.hubIdx])*hubR*1.1; // 허브 반경 약간 확대
+    if(n.depth===1) return W/2 + Math.cos(innerAngles[n.id]) * (hubR * 0.55); // 명확한 내부 링
     if(n.hubIdx==null) return W/2;
     const ang=hubAngles[n.hubIdx]+angleOffset(n);
-    return W/2+Math.cos(ang)*(n.depth===2?d2R:d3R);
+    return W/2+Math.cos(ang)*(n.depth===2?d2R*1.05:d3R*0.95);
   }
   function ty(n) {
     if(n.depth===0) return H/2;
-    if(n.isHub) return H/2+Math.sin(hubAngles[n.hubIdx])*hubR;
-    if(n.depth===1) return H/2;
+    if(n.isHub) return H/2+Math.sin(hubAngles[n.hubIdx])*hubR*1.1;
+    if(n.depth===1) return H/2 + Math.sin(innerAngles[n.id]) * (hubR * 0.55);
     if(n.hubIdx==null) return H/2;
     const ang=hubAngles[n.hubIdx]+angleOffset(n);
-    return H/2+Math.sin(ang)*(n.depth===2?d2R:d3R);
+    return H/2+Math.sin(ang)*(n.depth===2?d2R*1.05:d3R*0.95);
   }
   function forceStr(n) {
     if(n.depth===0) return 0;
-    if(n.isHub)     return 0.92;
-    if(n.depth===1) return 0.12;   // 비허브: 느슨하게 중심 주변
-    if(n.depth===2) return 0.80;
-    if(n.depth===3) return 0.72;
+    if(n.isHub)     return 0.95;
+    if(n.depth===1) return 0.85;   // 비허브 1차 노드의 위치를 강하게 고정하여 이탈 및 누락 방지
+    if(n.depth===2) return 0.85;
+    if(n.depth===3) return 0.78;
     return 0;
   }
 
@@ -590,13 +607,14 @@ function updateGraph() {
     .attr('filter','url(#soft-blur)')
     .attr('stroke','none');
 
-  // 메인 원 — glassmorphism: 반투명 fill + white specular stroke
+  // 메인 원 — 프리미엄 Glass Orb 반투명 + 1px 테두리 + 빛 반사 필터
   enter.append('circle').attr('class','node-circle')
     .attr('r',d=>nodeRadius(d))
     .attr('fill',d=>nodeFillColor(d))
-    .attr('fill-opacity',d=>d.depth===3?0.78:d.depth===1&&!d.isHub?0.84:0.92)
-    .attr('stroke','rgba(255,255,255,0.55)')
-    .attr('stroke-width',d=>d.depth===0?2.5:d.isHub?2.0:1.5);
+    .attr('fill-opacity',d=>d.depth===3?0.6:d.depth===1&&!d.isHub?0.75:0.85)
+    .attr('stroke','rgba(255,255,255,0.7)')
+    .attr('stroke-width',d=>d.depth===0?1.5:1)
+    .attr('filter','url(#glass-orb)');
 
   // 텍스트 — 클린 볼드, 테두리 없음
   enter.each(function(d) {
@@ -687,8 +705,8 @@ const infoPanelEl=document.getElementById('info-panel');
 
 function onHover(e,d) {
   const r=nodeRadius(d);
-  d3.select(this).select('.node-circle').attr('filter','url(#glow)').transition().duration(150).attr('r',r*1.12);
-  d3.select(this).select('.node-glow').transition().duration(150).attr('fill-opacity',0.18);
+  d3.select(this).select('.node-circle').transition().duration(250).ease(d3.easeSpring||d3.easeCubicOut).attr('r',r*1.12);
+  d3.select(this).select('.node-glow').transition().duration(250).attr('fill-opacity',0.3);
   tooltipEl.textContent=d.label;
   tooltipEl.style.left=(e.clientX+14)+'px';tooltipEl.style.top=(e.clientY-8)+'px';
   tooltipEl.classList.add('visible');
@@ -709,7 +727,7 @@ function onHover(e,d) {
 }
 function onLeave(e,d) {
   const r=nodeRadius(d);
-  d3.select(this).select('.node-circle').attr('filter',null).transition().duration(150).attr('r',r);
+  d3.select(this).select('.node-circle').transition().duration(250).ease(d3.easeCubicOut).attr('r',r);
   const glowOp=d.depth===0?0.32:d.isHub?0.26:d.depth===1?0.20:d.depth===2?0.18:0.14;
   d3.select(this).select('.node-glow').transition().duration(150).attr('fill-opacity',glowOp);
   tooltipEl.classList.remove('visible');
