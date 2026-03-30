@@ -463,11 +463,12 @@ const zoom=d3.zoom()
   });
 svg.call(zoom);
 
-// 초기 마인드맵: 마인드맵 카테고리끼리 겹치지 않게 확장되었으므로, 화면에 다 들어오도록 0.38 배율 세팅
+// 초기 마인드맵: 마인드맵 카테고리끼리 겹치지 않게 확장되었으므로, 화면에 다 들어오도록 PC 0.42, 모바일 0.22 배율 세팅
 const _gEl = document.getElementById('graph');
 const _gW = _gEl.clientWidth || 800;
 const _gH = _gEl.clientHeight || 600;
-svg.call(zoom.transform, d3.zoomIdentity.translate(_gW/2, _gH/2).scale(0.38).translate(-_gW/2, -_gH/2));
+const _isMo = window.innerWidth <= 768;
+svg.call(zoom.transform, d3.zoomIdentity.translate(_gW/2, _gH/2).scale(_isMo ? 0.15 : 0.28).translate(-_gW/2, -_gH/2));
 
 function boundingForce() {
   const el=document.getElementById('graph');
@@ -517,15 +518,12 @@ function updateGraph() {
   const el=document.getElementById('graph');
   const W=el.clientWidth||800, H=el.clientHeight||600;
 
-  // 반경: 카테고리별 영역이 배타적으로 구분되도록 허브를 화면 전체에 넓게 배치
-  const hubR  = Math.max(W, H) * 0.38; // 허브 반경 대폭 확대 (카테고리 원형 영역 135px가 겹치지 않도록)
+  // 반경: 카테고리별 영역을 대폭 넓혀 자식 노드들이 충분한 240px 반경 안에 거주하도록 공간을 분리함
+  const hubR  = Math.max(W, H) * 0.55;
 
-  // 허브 각도: currentClusters.length 기준 pre-allocate
-  // hubIdx(0~N-1)로 직접 접근하므로 배열 크기 = 실제 허브 수
   const nHubs = currentClusters.length || MAX_HUB;
   const hubAngles = Array.from({length:nHubs}, (_,i)=>(i/nHubs)*2*Math.PI - Math.PI/2);
 
-  // 허브별 depth-2, depth-3 멤버 인덱스 → 부채꼴 오프셋
   const memberMap={};
   nodes.forEach(n=>{
     if(n.depth<2||n.hubIdx==null) return;
@@ -538,48 +536,42 @@ function updateGraph() {
     const ms=memberMap[key]||[];
     const idx=ms.indexOf(n.id), cnt=ms.length;
     if(cnt<=1) return 0;
-    // 허브 중심을 기준으로 바깥쪽으로 부채꼴 형태로만 퍼지게 각도 제한 (배타적 구역 형성)
     const spread=n.depth===2?(Math.PI/180*60):(Math.PI/180*80);
     return (idx/(cnt-1)-0.5)*spread;
   }
 
-  // 1차 서브 연관(허브가 아닌) 노드들을 위한 내부 링 계산
   const nonHubs = nodes.filter(n => n.depth === 1 && !n.isHub);
   const innerAngles = {};
   nonHubs.forEach((n, i) => { innerAngles[n.id] = (i / nonHubs.length) * 2 * Math.PI; });
 
-  // 목표 좌표: 2, 3차 키워드들을 중앙이 아닌 '자신의 허브 부모' 곁으로만 강하게 종속시킴
   function tx(n) {
     if(n.depth===0) return W/2;
     if(n.isHub) return W/2 + Math.cos(hubAngles[n.hubIdx])*hubR;
-    if(n.depth===1) return W/2 + Math.cos(innerAngles[n.id]) * (hubR * 0.40);
+    if(n.depth===1) return W/2 + Math.cos(innerAngles[n.id]) * (hubR * 0.35);
     if(n.hubIdx==null) return W/2;
-    
-    // 부모 허브의 좌표를 기점으로 방사형 거리를 둠 (절대 다른 허브 구역을 침범하지 않음)
-    const baseAng = hubAngles[n.hubIdx];
+    const hub = nodes.find(h => h.isHub && h.hubIdx === n.hubIdx);
+    const hx = hub && hub.x != null && !isNaN(hub.x) ? hub.x : (W/2 + Math.cos(hubAngles[n.hubIdx])*hubR);
     const offAng = angleOffset(n);
-    const localR = n.depth===2 ? 55 : 105; // 허브와의 로컬 거리 (원형 반경 135px 내부에 완벽히 종속됨)
-    const cx = W/2 + Math.cos(baseAng)*hubR; 
-    return cx + Math.cos(baseAng + offAng) * localR;
+    const localR = n.depth===2 ? 80 : 160;
+    return hx + Math.cos(hubAngles[n.hubIdx] + offAng) * localR;
   }
   function ty(n) {
     if(n.depth===0) return H/2;
     if(n.isHub) return H/2 + Math.sin(hubAngles[n.hubIdx])*hubR;
-    if(n.depth===1) return H/2 + Math.sin(innerAngles[n.id]) * (hubR * 0.40);
+    if(n.depth===1) return H/2 + Math.sin(innerAngles[n.id]) * (hubR * 0.35);
     if(n.hubIdx==null) return H/2;
-    
-    const baseAng = hubAngles[n.hubIdx];
+    const hub = nodes.find(h => h.isHub && h.hubIdx === n.hubIdx);
+    const hy = hub && hub.y != null && !isNaN(hub.y) ? hub.y : (H/2 + Math.sin(hubAngles[n.hubIdx])*hubR);
     const offAng = angleOffset(n);
-    const localR = n.depth===2 ? 55 : 105; 
-    const cy = H/2 + Math.sin(baseAng)*hubR;
-    return cy + Math.sin(baseAng + offAng) * localR;
+    const localR = n.depth===2 ? 80 : 160;
+    return hy + Math.sin(hubAngles[n.hubIdx] + offAng) * localR;
   }
   function forceStr(n) {
     if(n.depth===0) return 0.6;
-    if(n.isHub)     return 1.0; // 흔들리지 않는 뿌리 고정
+    if(n.isHub)     return 1.0; 
     if(n.depth===1) return 0.95;
-    if(n.depth===2) return 0.95; // 부모 곁에 강제 고정
-    if(n.depth===3) return 0.95; // 부모 곁에 강제 고정
+    if(n.depth===2) return 1.1; 
+    if(n.depth===3) return 1.1; 
     return 0;
   }
 
@@ -595,13 +587,46 @@ function updateGraph() {
   link.exit().remove();
 
   const node=nodesG.selectAll('g.node-group').data(nodes,d=>d.id);
+  const isMo = window.innerWidth <= 768;
   const enter=node.enter().append('g').attr('class','node-group')
-    .style('opacity',0).style('cursor','pointer')
-    .call(d3.drag()
-      .on('start',(e,d)=>{if(!e.active)simulation.alphaTarget(0.1).restart();d.fx=d.x;d.fy=d.y;tooltipEl.classList.remove('visible');})
-      .on('drag',(e,d)=>{d.fx=e.x;d.fy=e.y;showInfoCard(d);})
-      .on('end',(e,d)=>{if(!e.active)simulation.alphaTarget(0);d.fx=null;d.fy=null;}))
-    .on('mouseenter',onHover).on('mouseleave',onLeave).on('click',onClick);
+    .style('opacity',0).style('cursor', window.innerWidth <= 768 ? 'default' : 'pointer');
+
+  if (window.innerWidth > 768) {
+    enter.call(d3.drag()
+      .on('start',(e,d)=>{
+        if(!e.active) simulation.alphaTarget(0.3).restart(); 
+        d.fx=d.x; d.fy=d.y; 
+        tooltipEl.classList.remove('visible');
+      })
+      .on('drag',(e,d)=>{
+        const dx = e.x - d.x;
+        const dy = e.y - d.y;
+        d.fx = e.x; d.fy = e.y;
+        d.x = e.x; d.y = e.y;
+        if (d.isHub) {
+          nodes.forEach(n => {
+            if (n.hubIdx === d.hubIdx && n.depth >= 2) {
+              if (n.fx == null) { n.fx = n.x; n.fy = n.y; }
+              n.fx += dx; n.fy += dy;
+              n.x += dx; n.y += dy;
+            }
+          });
+        }
+        showInfoCard(d);
+      })
+      .on('end',(e,d)=>{
+        if(!e.active) simulation.alphaTarget(0);
+        if (d.depth !== 0 && !d.isHub) { d.fx=null; d.fy=null; }
+        if (d.isHub) {
+          nodes.forEach(n => {
+            if (n.hubIdx === d.hubIdx && n.depth >= 2) {
+              n.fx = null; n.fy = null;
+            }
+          });
+        }
+      }))
+      .on('mouseenter',onHover).on('mouseleave',onLeave).on('click',onClick);
+  }
 
   // 메인 원 — 솔리드 SaaS 스타일 (단색 + 선명한 쉐도우)
   enter.append('circle').attr('class','node-circle')
@@ -656,15 +681,9 @@ function updateGraph() {
 
   simulation.nodes(nodes);
   simulation.force('link').links(links);
-  simulation.force('link').distance(d=>{
-    const t=nodes.find(n=>n.id===(d.target?.id||d.target));
-    if(!t) return 55;
-    if(t.isHub) return 48;
-    if(t.depth===1) return 32;
-    if(t.depth===2) return 42;
-    if(t.depth===3) return 36;
-    return 44;
-  });
+  // 링크 거리 장력(Tension)을 극단적으로 줄이거나 무력화하여, 
+  // 물리엔진이 clusterX/Y의 목표 좌표(tx/ty) 배치 계획을 망치거나 당기지 못하게 설정.
+  simulation.force('link').strength(0.01);
   simulation.force('collision').radius(d=>nodeRadius(d)+(d.depth===0?26:d.isHub?20:d.depth===1?14:d.depth===2?13:10));
   simulation.force('center',d3.forceCenter(W/2,H/2));
   simulation.alpha(0.75).restart();
@@ -687,283 +706,25 @@ function updateGraph() {
   });
 }
 
-// ── 허브 헐(halo) 렌더 — 겹치지 않는 완전한 원형 구조 ─────────────────
+// ── 허브 헐(halo) 렌더 — 겹치지 않는 완전한 대형 원형 구조 ─────────────────
 function renderHalos() {
   const hubs = nodes.filter(n => n.isHub && n.x != null && !isNaN(n.x));
-  
   halosG.selectAll('.ch').data(hubs, d => d.id).join(
     enter => enter.append('g').attr('class', 'ch').call(g => {
       g.append('circle').attr('class', 'ch-fill');
     })
   ).each(function(hub) {
-    const color = CLUSTER_COLORS[hub.hubIdx % CLUSTER_COLORS.length];
+    const color = CLUSTER_COLORS[(hub.hubIdx||0) % CLUSTER_COLORS.length];
     d3.select(this).select('.ch-fill')
       .attr('cx', hub.x)
       .attr('cy', hub.y)
-      .attr('r', 135) // 절대로 겹치지 않는 고정된 독립 반경
+      .attr('r', 240)
       .attr('fill', color).attr('fill-opacity', 0.05)
       .attr('stroke', color).attr('stroke-width', 2)
       .attr('stroke-dasharray', '8,4')
       .attr('stroke-opacity', 0.8)
       .style('filter', 'drop-shadow(0 4px 12px rgba(0,0,0,0.03))');
   });
-}
-
-// ── 호버 / 클릭 ───────────────────────────────────────
-const tooltipEl=document.getElementById('tooltip');
-const infoPanelEl=document.getElementById('info-panel');
-
-function onHover(e,d) {
-  const r=nodeRadius(d);
-  d3.select(this).select('.node-circle').transition().duration(250).ease(d3.easeSpring||d3.easeCubicOut).attr('r',r*1.12);
-  tooltipEl.textContent=d.label;
-  tooltipEl.style.left=(e.clientX+14)+'px';tooltipEl.style.top=(e.clientY-8)+'px';
-  tooltipEl.classList.add('visible');
-  
-  if (typeof showInfoCard === 'function') showInfoCard(d); // 마우스 호버 시 즉시 상세 데이터 카드 표시
-  // 연결된 노드/링크만 강조, 나머지 흐리게
-  const connectedIds=new Set([d.id]);
-  links.forEach(lk=>{
-    const s=lk.source?.id||lk.source, t=lk.target?.id||lk.target;
-    if(s===d.id) connectedIds.add(t);
-    if(t===d.id) connectedIds.add(s);
-  });
-  nodesG.selectAll('g.node-group').transition().duration(150)
-    .style('opacity',n=>connectedIds.has(n.id)?1:0.18);
-  linksG.selectAll('path.link-path').transition().duration(150)
-    .style('opacity',lk=>{
-      const s=lk.source?.id||lk.source, t=lk.target?.id||lk.target;
-      return (s===d.id||t===d.id)?1:0.06;
-    });
-}
-function onLeave(e,d) {
-  const r=nodeRadius(d);
-  d3.select(this).select('.node-circle').transition().duration(250).ease(d3.easeCubicOut).attr('r',r);
-  tooltipEl.classList.remove('visible');
-  nodesG.selectAll('g.node-group').transition().duration(200).style('opacity',1);
-  linksG.selectAll('path.link-path').transition().duration(200).style('opacity',1);
-}
-// ── 개별 상세 데이터 카드 노출 로직 ──────────────────
-function showInfoCard(d) {
-  if(isLoading) return;
-  const maxV = Math.max(d.pcVol||0, d.mobileVol||0, 1);
-  const pcPct = d.pcVol ? Math.max(2, Math.round(d.pcVol/maxV*100)) : 0;
-  const moPct = d.mobileVol ? Math.max(2, Math.round(d.mobileVol/maxV*100)) : 0;
-  infoPanelEl.innerHTML=`
-    <div class="info-card-header">
-      <span class="info-kw">${d.label}</span>
-      <span class="info-depth">${d.depth===0?'검색어':d.isHub?'TOP5 핵심':d.depth+'차 연관어'}</span>
-    </div>
-    ${d.totalVol ? `
-    <div class="card-bars">
-      <div class="card-bar-row">
-        <span class="card-bar-label pc">PC</span>
-        <div class="card-bar-track"><div class="card-bar-fill pc" style="width:${pcPct}%"></div></div>
-        <span class="card-bar-val">${(d.pcVol||0).toLocaleString()}</span>
-      </div>
-      <div class="card-bar-row">
-        <span class="card-bar-label mo">MO</span>
-        <div class="card-bar-track"><div class="card-bar-fill mo" style="width:${moPct}%"></div></div>
-        <span class="card-bar-val">${(d.mobileVol||0).toLocaleString()}</span>
-      </div>
-    </div>
-    <div class="card-detail">
-      <table class="card-detail-table">
-        <thead><tr><th></th><th>검색량</th><th>클릭율</th></tr></thead>
-        <tbody>
-          <tr><td>PC</td><td><b>${fmtN(d.pcVol)}</b></td><td>${fmtCtr(d.pcCtr)}</td></tr>
-          <tr><td>MO</td><td><b>${fmtN(d.mobileVol)}</b></td><td>${fmtCtr(d.mobileCtr)}</td></tr>
-        </tbody>
-      </table>
-    </div>` : '<div style="font-size:12px;color:#9ca3af;padding:8px 0">검색량 데이터 없음</div>'}
-    <div class="hint" onclick="window.reSearch('${d.label.replace(/'/g,"\\'")}')">이 키워드로 새 검색 →</div>`;
-  infoPanelEl.classList.add('visible');
-}
-
-function onClick(e,d) {
-  e.stopPropagation();
-  showInfoCard(d);
-}
-svg.on('click',()=>infoPanelEl.classList.remove('visible'));
-document.querySelector('.mindmap-content-wrap').addEventListener('mouseleave',()=>infoPanelEl.classList.remove('visible'));
-window.reSearch=kw=>{
-  document.getElementById('searchInput').value=kw;
-  const hdrIn=document.getElementById('headerInput');
-  if(hdrIn) hdrIn.value=kw;
-  startSearch(kw);
-};
-
-// ── 데이터 엑셀 다운로드 ─────────────────────────────────
-function downloadExcel() {
-  if(!nodes.length){showToast('데이터가 없습니다');return;}
-  const kw=currentKeyword||'mindmap';
-  const headers=['키워드','깊이','PC 검색량','MO 검색량','전체 검색량','PC 클릭율','MO 클릭율','경쟁도'];
-  const rows=nodes
-    .sort((a,b)=>a.depth-b.depth||b.totalVol-a.totalVol)
-    .map(n=>[
-      n.label,
-      n.depth===0?'검색어':`${n.depth}차 연관`,
-      n.pcVol||0, n.mobileVol||0, n.totalVol||0,
-      n.pcCtr?`${n.pcCtr}%`:'0%',
-      n.mobileCtr?`${n.mobileCtr}%`:'0%',
-      n.compIdx||'-',
-    ]);
-  const tsv='\ufeff'+[headers,...rows].map(r=>r.join('\t')).join('\n');
-  const blob=new Blob([tsv],{type:'text/tab-separated-values;charset=utf-8'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url;a.download=`naver_mindmap_${kw}_${new Date().toISOString().slice(0,10)}.xls`;
-  document.body.appendChild(a);a.click();
-  document.body.removeChild(a);URL.revokeObjectURL(url);
-  showToast('다운로드 완료!');
-}
-
-// ── 스마트 수집 (허브 기반, 3 API 배치) ──────────────────
-async function collectAll(rootKeyword, rootId, prefetchedRoot) {
-  const barEl=document.getElementById('progress-bar');
-  const progEl=document.getElementById('loading-progress');
-  function prog(pct,text){
-    if(barEl) barEl.style.width=pct+'%';
-    if(progEl) progEl.innerHTML=`<span style="font-weight:700; color:#4F46E5;">${Math.round(pct)}%</span> - ${text}`;
-  }
-
-  prog(10,'키워드 스코어링...');
-
-  // 점수 계산 후 정렬
-  const scored=prefetchedRoot
-    .map((item,idx)=>({...item,_score:relevanceScore(item,idx)}))
-    .sort((a,b)=>b._score-a._score);
-
-  // TOP5 → 허브 / 나머지 MAX_D1개 → 기타 1차
-  const hubs    = scored.slice(0, MAX_HUB);
-  const nonHubs = scored.slice(MAX_HUB, MAX_HUB + MAX_D1);
-
-  // 실제 추가된 허브만 클러스터로 생성 (skip된 허브 제외)
-  // hubIdx를 sequential로 배정해야 hubAngles[hubIdx] 인덱스 매핑이 정확함
-  const addedHubs = [];
-  hubs.forEach((item)=>{
-    const id=item.keyword.toLowerCase().trim();
-    if(!id||nodeIds.has(id)) return;
-    addedHubs.push(item);
-  });
-  currentClusters = addedHubs.map((item,i)=>({
-    id:`hub-${i}`, hubIdx:i,
-    label:item.keyword||'',
-    color:CLUSTER_COLORS[i%CLUSTER_COLORS.length],
-    items:[item],
-  }));
-  prog(20,`TOP${addedHubs.length} 허브 선정 완료`);
-
-  // 허브 노드 추가 (sequential hubIdx: 0,1,2,3,4 순서 보장)
-  addedHubs.forEach((item,i)=>{
-    const id=item.keyword.toLowerCase().trim();
-    nodeIds.add(id);
-    nodes.push({id,label:item.keyword,depth:1,isHub:true,hubIdx:i,
-      totalVol:item.totalVol||0,pcVol:item.pcVol||0,mobileVol:item.mobileVol||0,
-      pcClicks:item.pcClicks||0,mobileClicks:item.mobileClicks||0,
-      pcCtr:item.pcCtr||0,mobileCtr:item.mobileCtr||0,compIdx:item.compIdx||'',
-      _score:item._score});
-    links.push({source:rootId,target:id,strength:item._score});
-  });
-
-  // 기타 1차 노드 추가 (depth-1, isHub=false)
-  nonHubs.forEach(item=>{
-    const id=item.keyword.toLowerCase().trim();
-    if(!id||nodeIds.has(id)) return;
-    nodeIds.add(id);
-    nodes.push({id,label:item.keyword,depth:1,isHub:false,hubIdx:null,
-      totalVol:item.totalVol||0,pcVol:item.pcVol||0,mobileVol:item.mobileVol||0,
-      pcClicks:item.pcClicks||0,mobileClicks:item.mobileClicks||0,
-      pcCtr:item.pcCtr||0,mobileCtr:item.mobileCtr||0,compIdx:item.compIdx||'',
-      _score:item._score});
-    links.push({source:rootId,target:id,strength:item._score*0.35});
-  });
-
-  prog(30,`depth-2 수집 중 (허브 ${addedHubs.length}개 병렬)...`);
-
-  // Batch 2: 허브당 depth-2 병렬 수집
-  const hubNodes=nodes.filter(n=>n.isHub);
-  const d2Results=await Promise.allSettled(hubNodes.map(n=>fetchNaverKeywords(n.label)));
-
-  const d3Parents=[];  // batch 3용 (허브당 최상위 depth-2 노드 1개)
-
-  d2Results.forEach((r,i)=>{
-    prog(30+((i+1)/hubNodes.length)*30,`depth-2 (${i+1}/${hubNodes.length}) 완료`);
-    if(r.status!=='fulfilled') return;
-    const hubNode=hubNodes[i];
-    let added=0;
-    r.value.slice(0,MAX_D2_PER*3).forEach((item,idx)=>{
-      if(added>=MAX_D2_PER) return;
-      const id=item.keyword.toLowerCase().trim();
-      if(!id||nodeIds.has(id)) return;
-      nodeIds.add(id);
-      added++;
-      const sc=relevanceScore(item,idx)*0.5;
-      const d2n={id,label:item.keyword,depth:2,isHub:false,hubIdx:hubNode.hubIdx,
-        totalVol:item.totalVol||0,pcVol:item.pcVol||0,mobileVol:item.mobileVol||0,
-        pcClicks:item.pcClicks||0,mobileClicks:item.mobileClicks||0,
-        pcCtr:item.pcCtr||0,mobileCtr:item.mobileCtr||0,compIdx:item.compIdx||'',
-        _score:sc};
-      nodes.push(d2n);
-      links.push({source:hubNode.id,target:id,strength:sc});
-      if(added===1) d3Parents.push(d2n);  // 허브당 top-1 depth-2 → batch3 대상
-    });
-  });
-
-  prog(60,`depth-3 수집 중 (${d3Parents.length}개 병렬)...`);
-
-  // Batch 3: 허브당 최상위 depth-2에서 depth-3 수집
-  if(d3Parents.length>0) {
-    const d3Results=await Promise.allSettled(d3Parents.map(n=>fetchNaverKeywords(n.label)));
-    d3Results.forEach((r,i)=>{
-      prog(60+((i+1)/d3Parents.length)*35,`depth-3 (${i+1}/${d3Parents.length}) 완료`);
-      if(r.status!=='fulfilled') return;
-      const parentNode=d3Parents[i];
-      let added=0;
-      r.value.slice(0,MAX_D3_PER*3).forEach((item,idx)=>{
-        if(added>=MAX_D3_PER) return;
-        const id=item.keyword.toLowerCase().trim();
-        if(!id||nodeIds.has(id)) return;
-        nodeIds.add(id);
-        added++;
-        const sc=relevanceScore(item,idx)*0.25;
-        nodes.push({id,label:item.keyword,depth:3,isHub:false,hubIdx:parentNode.hubIdx,
-          totalVol:item.totalVol||0,pcVol:item.pcVol||0,mobileVol:item.mobileVol||0,
-          pcClicks:item.pcClicks||0,mobileClicks:item.mobileClicks||0,
-          pcCtr:item.pcCtr||0,mobileCtr:item.mobileCtr||0,compIdx:item.compIdx||'',
-          _score:sc});
-        links.push({source:parentNode.id,target:id,strength:sc});
-      });
-    });
-  }
-
-  prog(100,`총 ${nodes.length}개 키워드 (허브 ${hubNodes.length}개)`);
-}
-
-// ── UI 유틸 ───────────────────────────────────────────
-const loadingEl=document.getElementById('loading');
-const loadingText=document.getElementById('loading-text');
-const emptyState=document.getElementById('empty-state');
-const toastEl=document.getElementById('toast');
-let toastTimer;
-
-function showToast(msg) {
-  clearTimeout(toastTimer);
-  toastEl.textContent=msg;toastEl.classList.add('show');
-  toastTimer=setTimeout(()=>toastEl.classList.remove('show'),3500);
-}
-function setLoading(active,text='연관 검색어 수집 중...') {
-  isLoading=active;
-  loadingText.textContent=text;
-  loadingEl.classList.toggle('active',active);
-  document.getElementById('searchBtn').disabled=active;
-  const hb=document.getElementById('headerBtn');
-  if(hb) hb.disabled=active;
-  if(!active) {
-    document.getElementById('loading-progress').textContent='';
-    const b=document.getElementById('progress-bar');
-    if(b) b.style.width='0%';
-  }
 }
 
 function updateLegend(keyword) {
@@ -1091,3 +852,18 @@ window.addEventListener('resize',()=>{
 });
 svg.call(zoom.transform,d3.zoomIdentity);
 renderGenderAge(null);
+
+// ── 마인드맵 전체화면 동작 ───────────────────────────────
+window.toggleFullscreen = function() {
+  const outer = document.querySelector('.mindmap-outer');
+  const fsBtn = document.getElementById('fs-btn');
+  if(outer.classList.contains('fullscreen-mode')) {
+    outer.classList.remove('fullscreen-mode');
+    if(fsBtn) fsBtn.textContent = '전체화면 ⛶';
+  } else {
+    outer.classList.add('fullscreen-mode');
+    if(fsBtn) fsBtn.textContent = '기본화면 ✖';
+  }
+  // css 변경 후 레이아웃 재계산을 위해 리사이즈 이벤트를 발생시킵니다.
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+};
