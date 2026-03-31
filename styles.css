@@ -361,11 +361,12 @@ header.hidden { display: none; }
 }
 .mindmap-header {
   position: absolute; top: 0; left: 0; right: 0; 
-  padding: 14px 20px; display: flex; align-items: center; justify-content: space-between;
-  border-bottom: 1px solid rgba(0,0,0,0.03); background: rgba(255,255,255,0.7);
-  backdrop-filter: blur(8px); z-index: 1000;
-  border-top-left-radius: 16px; border-top-right-radius: 16px;
-  pointer-events: none; /* 헤더 자체는 통과, 버튼만 클릭 가능하게 */
+  padding: 10px 20px; display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid rgba(0,0,0,0.05); background: rgba(255,255,255,0.9);
+  backdrop-filter: blur(12px); z-index: 1000;
+  border-top-left-radius: 12px; border-top-right-radius: 12px;
+  pointer-events: none;
+  max-width: 100%; box-sizing: border-box; /* 라벨 이탈 방지 */
 }
 .mindmap-header * { pointer-events: auto; }
 .mm-download-btn {
@@ -412,7 +413,7 @@ header.hidden { display: none; }
   touch-action: pan-y;
 }
 .mindmap-title { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
-.mm-legend { display: flex; gap: 10px; flex-wrap: wrap; }
+.mm-legend { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-start; } /* 좌측 정렬 복원 */
 .mm-legend-item { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); font-weight: 500; }
 .mm-dot { width: 9px; height: 9px; border-radius: 50%; }
 #graph {
@@ -425,7 +426,7 @@ header.hidden { display: none; }
 /* ── 로딩 (프로그레스 바) ── */
 #loading {
   display: none; position: fixed; top: 50%; left: 50%;
-  transform: translate(-50%, -50%); z-index: 300;
+  transform: translate(-50%, -50%); z-index: 3001;
   background: rgba(255,255,255,0.96);
   backdrop-filter: var(--blur);
   border: 1px solid rgba(0,0,0,0.07);
@@ -434,6 +435,27 @@ header.hidden { display: none; }
   text-align: center; min-width: 260px;
 }
 #loading.active { display: block; }
+
+/* 잔상 유발하는 모든 SVG 필터 및 쉐도우 제거 (SaaS 클린 스타일) */
+.node-circle { filter: none !important; }
+.ch-fill { filter: none !important; }
+
+/* ── 인포 패널 (카드 스타일) ── */
+#info-panel {
+  position: absolute; bottom: 24px; right: 24px;
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--border);
+  border-radius: var(--r); padding: 16px 18px;
+  box-shadow: var(--shadow2);
+  font-size: 13px; color: var(--muted);
+  display: none; width: 240px; z-index: 1000;
+}
+#info-panel.visible { display: block; }
+.info-stats { margin-bottom: 0; }
+.info-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+.info-row b { color: var(--text); }
 .spinner {
   width: 36px; height: 36px;
   border: 3px solid rgba(26,86,219,0.15);
