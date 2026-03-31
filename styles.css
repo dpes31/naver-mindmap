@@ -360,15 +360,20 @@ header.hidden { display: none; }
   overflow: hidden;
 }
 .mindmap-header {
-  position: absolute; top: 0; left: 0; right: 0; 
-  padding: 10px 20px; display: flex; align-items: center; justify-content: space-between;
-  border-bottom: 1px solid rgba(0,0,0,0.05); background: rgba(255,255,255,0.9);
-  backdrop-filter: blur(12px); z-index: 1000;
-  border-top-left-radius: 12px; border-top-right-radius: 12px;
-  pointer-events: none;
-  max-width: 100%; box-sizing: border-box; /* 라벨 이탈 방지 */
+  position: absolute; top: 0; left: 30px; right: 30px; 
+  padding: 15px 0; display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid rgba(0,0,0,0.08); background: rgba(255,255,255,0.98);
+  backdrop-filter: blur(12px); z-index: 1100;
+  border-top-left-radius: 20px; border-top-right-radius: 20px;
+  /* pointer-events: none 제거: 버튼 클릭을 위해 auto로 변경 */
+  pointer-events: auto;
+  width: auto; box-sizing: border-box;
 }
-.mindmap-header * { pointer-events: auto; }
+.card-kw-name {
+  font-size: 1.25rem; font-weight: 800; color: #111827; letter-spacing: -0.025em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 280px; /* 라벨이 카드 밖으로 삐져나오지 않도록 박제 */
+}
 .mm-download-btn {
   margin-left: auto; flex-shrink: 0;
   padding: 5px 12px; font-size: 11px; font-weight: 600;
@@ -443,16 +448,14 @@ header.hidden { display: none; }
 /* ── 인포 패널 (카드 스타일) ── */
 #info-panel {
   position: absolute; bottom: 24px; right: 24px;
-  background: var(--glass);
-  backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
-  border: 1px solid var(--border);
-  border-radius: var(--r); padding: 16px 18px;
-  box-shadow: var(--shadow2);
+  background: #FFFFFF !important; /* 투명도 제거, 순백색 박제 */
+  border: 1px solid rgba(0,0,0,0.1);
+  border-radius: 16px; padding: 20px;
+  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
   font-size: 13px; color: var(--muted);
-  display: none; width: 240px; z-index: 1000;
+  display: none; width: 260px; z-index: 9999; /* 최상단 노출 */
 }
-#info-panel.visible { display: block; }
+#info-panel.visible { display: block !important; }
 .info-stats { margin-bottom: 0; }
 .info-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
 .info-row b { color: var(--text); }
@@ -526,19 +529,8 @@ header.hidden { display: none; }
 .ct-row b { font-weight: 700; color: var(--text); margin-left: auto; }
 .ct-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
-/* ── 인포 패널 (카드 스타일) ── */
-#info-panel {
-  position: absolute; bottom: 24px; right: 24px;
-  background: var(--glass);
-  backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
-  border: 1px solid var(--border);
-  border-radius: var(--r); padding: 16px 18px;
-  box-shadow: var(--shadow2);
-  font-size: 13px; color: var(--muted);
-  display: none; width: 240px; z-index: 200;
-}
-#info-panel.visible { display: block; }
+/* ── 하단 여백 ── */
+.bottom-spacer { height: 40px; }
 .info-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
 .info-kw { font-size: 15px; font-weight: 700; color: var(--text); }
 .info-depth { font-size: 11px; color: #9ca3af; background: #f3f4f6; padding: 2px 7px; border-radius: 10px; white-space: nowrap; flex-shrink: 0; }
