@@ -123,7 +123,22 @@
 <div id="toast"></div>
 <div id="tooltip"></div>
 <div id="chart-tooltip" class="chart-tooltip"></div>
-<div id="info-panel"></div>
+<div id="info-panel">
+  <div class="info-card-header">
+    <div id="info-title" class="info-kw">키워드 정보</div>
+    <div id="info-type" class="info-depth">연관 검색어</div>
+  </div>
+  <div class="info-stats">
+    <div class="info-row"><span>PC 검색량</span><b id="info-pc">0</b></div>
+    <div class="info-row"><span>Mobile 검색량</span><b id="info-mo">0</b></div>
+    <div class="info-row"><span>총 검색량</span><b id="info-tot">0</b></div>
+    <div class="info-row" style="margin-top:8px; border-top:1px solid rgba(0,0,0,0.05); padding-top:8px;">
+      <span>PC 클릭수</span><b id="info-pc-clicks">0</b>
+    </div>
+    <div class="info-row"><span>Mobile 클릭수</span><b id="info-mo-clicks">0</b></div>
+    <div class="info-row"><span>평균 CTR</span><b id="info-ctr">0%</b></div>
+  </div>
+</div>
 
 <script src="app.js"></script>
 </body>
