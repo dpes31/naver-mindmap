@@ -573,9 +573,8 @@ header.hidden { display: none; }
   .mm-download-btn { font-size: 10px; padding: 4px 8px; }
 
   /* 모바일 인포 패널: 화면 하단 고정 */
-  #info-panel { bottom: 12px; right: 12px; left: 12px; width: auto; }
-  #info-panel { display: none !important; }
-  #tooltip { display: none !important; }
+  #info-panel { bottom: 12px; right: 12px; left: 12px; width: auto; z-index: 10000; position: fixed; display: none; }
+  #info-panel.visible { display: block !important; }
   /* mm-fs-btn 비활성화 해제 - 전체화면 사용 가능하도록 */
-  .mm-fs-btn { display: inline-block !important; }
+  .mm-fs-btn { display: inline-block !important; z-index: 999999 !important; position: relative; }
 }

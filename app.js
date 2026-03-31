@@ -646,6 +646,16 @@ function updateGraph() {
     .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + 12).strength(1))
     .alpha(1).restart();
 
+  // 루트 및 4순위 허브 좌표 강제 고정 (PPT 설계도 1:1 박제)
+  nodes.forEach(n => {
+    if (n.depth === 0) { n.fx = CX; n.fy = CY; }
+    if (n.isHub && n.hubIdx != null) {
+      const hIdx = n.hubIdx % 4;
+      n.fx = CX + Math.cos(hubAngles[hIdx]) * 600;
+      n.fy = CY + Math.sin(hubAngles[hIdx]) * 600;
+    }
+  });
+
   // 링크 (강도 상위 MAX_LINKS_SHOW개)
   const shownLinks=[...links].sort((a,b)=>(b.strength||0)-(a.strength||0)).slice(0,MAX_LINKS_SHOW);
   const link=linksG.selectAll('path.link-path').data(shownLinks,d=>`${d.source?.id||d.source}→${d.target?.id||d.target}`);
