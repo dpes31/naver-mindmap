@@ -584,10 +584,13 @@ function updateGraph() {
 
   // 레이아웃 상수
   const R_SUB    = 110;  // 중앙 서브 노드 반경
-  const R_HUB    = Math.min(W, H) * 0.38;  // 4분면 허브 거리 (화면 크기 비례)
-  const R_ORBIT2 = 85;   // 집단 내 2차 반경
-  const R_ORBIT3 = 155;  // 집단 내 3차 반경
-  const CLUSTER_BOUNDARY = 190; // 집단 봉쇄 경계 (halo r=210 안쪽)
+  // 인접 허브 간 거리 = 1.414 * R_HUB — halo 겹침 방지 조건: R_HUB > halo_r * 2 / 1.414 = halo_r * 1.414
+  // halo_r=175 → 최소 R_HUB=248. 0.44 계수 + 최소 320px 보장
+  const R_HUB    = Math.max(Math.min(W, H) * 0.44, 320);
+  const R_ORBIT2 = 80;   // 집단 내 2차 반경
+  const R_ORBIT3 = 145;  // 집단 내 3차 반경 (봉쇄 경계 안쪽 유지)
+  const HALO_R   = 175;  // halo 시각 원 반지름 (인접 원 겹침 없음: 1.414*320 ≈ 452 > 175*2=350)
+  const CLUSTER_BOUNDARY = 165; // 봉쇄 경계 (halo_r보다 10px 작게 → 노드가 원 안에 유지)
 
   const hubAngles = [Math.PI * 1.75, Math.PI * 1.25, Math.PI * 0.75, Math.PI * 0.25]; // NE, NW, SW, SE
 
@@ -647,8 +650,10 @@ function updateGraph() {
       const dist = Math.sqrt(dx*dx + dy*dy) || 1;
       if (dist > CLUSTER_BOUNDARY) {
         const over = (dist - CLUSTER_BOUNDARY) / dist;
-        n.vx -= dx * over * 0.7 * alpha;
-        n.vy -= dy * over * 0.7 * alpha;
+        // alpha가 낮아도 최소 0.25 강도 유지 → 경계 탈출 방지
+        const strength = Math.max(alpha, 0.25);
+        n.vx -= dx * over * 1.5 * strength;
+        n.vy -= dy * over * 1.5 * strength;
       }
     });
   }
@@ -800,7 +805,7 @@ function renderHalos() {
     d3.select(this).select('.ch-fill')
       .attr('cx', hub.x)
       .attr('cy', hub.y)
-      .attr('r', 210) // 230 -> 210 (회장님 지침: 원 안으로 노드들을 수용)
+      .attr('r', 175) // HALO_R=175: 인접 원 겹침 방지 (1.414*320≈452 > 175*2=350)
       .attr('fill', color).attr('fill-opacity', 0.05)
       .attr('stroke', color).attr('stroke-width', 2)
       .attr('stroke-dasharray', '8,4')
