@@ -28,11 +28,13 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'NAVER_DATALAB_CLIENT_ID / NAVER_DATALAB_CLIENT_SECRET 환경변수 미설정' });
 
   const now    = new Date();
+  // 전월 말일 (날짜 오버플로우 없이 안전하게 계산)
   const endD   = new Date(now.getFullYear(), now.getMonth(), 0); // last day of prev month
-  const startD = new Date(endD);
-  startD.setMonth(startD.getMonth() - 11);
-  startD.setDate(1);
+  // 12개월 전 1일 — setMonth() 대신 생성자로 직접 계산하여 날짜 오버플로우 방지
+  const startD = new Date(endD.getFullYear(), endD.getMonth() - 11, 1);
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  // 트렌드 마지막 포인트의 월 (전월)
+  const lastTrendMonth = `${endD.getFullYear()}-${String(endD.getMonth()+1).padStart(2,'0')}`;
   const fmt = d => d.toISOString().slice(0, 10);
   const base = {
     startDate: fmt(startD),
@@ -102,7 +104,7 @@ module.exports = async (req, res) => {
     const ages = {};
     ageAvgs.forEach(({ label, val }) => { ages[label] = +(val / ageTot * 100).toFixed(1); });
 
-    return res.status(200).json({ trend, gender, ages });
+    return res.status(200).json({ trend, gender, ages, lastTrendMonth });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

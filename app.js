@@ -212,17 +212,30 @@ function renderStats(keyword, items) {
 
 // ── DataLab 상대지수 → 절대값 변환 ──────────────────
 // DataLab 상대 지수를 Search Ads API 절대값으로 변환
-// 기준: 마지막 DataLab 데이터포인트 = Search Ads API 현재 월 절대값 (1:1 anchoring)
-// 나머지 월 = DataLab 상대 비율로 비례 계산
-// ※ Search Ads API는 현재 월 1개 값만 제공 → 과거 월은 DataLab 비율로 역산한 추정치
-function scaleTrend(trend, pcAbs, moAbs) {
+// 기준: 마지막 DataLab 데이터포인트 월 === Search Ads API가 집계한 월이어야 앵커링 유효
+// 새 달 초(1~7일)에는 Search Ads가 이전 달 기준이 아닐 수 있으므로 앵커링 사용 안 함
+function scaleTrend(trend, pcAbs, moAbs, lastTrendMonth) {
   if (!trend?.length) return trend;
   const last = trend[trend.length - 1];
+
+  // 월 불일치 감지: 현재 날짜가 새 달 초(1~7일)이고 lastTrendMonth가 2달 이전이면 앵커링 스킵
+  const now = new Date();
+  const currentYM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const prevYM = (() => {
+    const d = new Date(now.getFullYear(), now.getMonth(), 0);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  })();
+  // Search Ads rolling 30일값이 신뢰 불가한 경우: 새 달 1~10일
+  const isMonthBoundary = now.getDate() <= 10;
+  // lastTrendMonth가 전전달 이하라면 앵커링 기준 불일치
+  const anchorMismatch = lastTrendMonth && lastTrendMonth < prevYM;
+  const skipScale = isMonthBoundary || anchorMismatch;
+
   const pcRef = last?.pc || 1, moRef = last?.mo || 1;
   return trend.map(d=>({
     period: d.period,
-    pc: pcAbs > 0 ? Math.round(d.pc / pcRef * pcAbs) : Math.round(d.pc),
-    mo: moAbs > 0 ? Math.round(d.mo / moRef * moAbs) : Math.round(d.mo),
+    pc: (!skipScale && pcAbs > 0) ? Math.round(d.pc / pcRef * pcAbs) : Math.round(d.pc),
+    mo: (!skipScale && moAbs > 0) ? Math.round(d.mo / moRef * moAbs) : Math.round(d.mo),
   }));
 }
 let currentTrendData=null;
@@ -237,7 +250,7 @@ function copyTrendData() {
 }
 
 // ── 추이 라인차트 (D3) ────────────────────────────────
-function renderTrendChart(trendData, pcAbsNow, moAbsNow) {
+function renderTrendChart(trendData, pcAbsNow, moAbsNow, lastTrendMonth) {
   const container = document.getElementById('trend-chart');
   const legendEl  = document.getElementById('trend-legend');
   container.innerHTML = '';
@@ -249,7 +262,7 @@ function renderTrendChart(trendData, pcAbsNow, moAbsNow) {
   }
 
   // Search Ads API 절대값 기준으로 스케일링 (마지막 월 = Search Ads API 정확값)
-  const data = scaleTrend(trendData, pcAbsNow||0, moAbsNow||0);
+  const data = scaleTrend(trendData, pcAbsNow||0, moAbsNow||0, lastTrendMonth);
   currentTrendData = data;
 
   if (legendEl) legendEl.innerHTML =
@@ -393,10 +406,10 @@ function renderGenderAge(data) {
 }
 
 // ── 노드 반경 (검색량 비례 — 같은 depth 내 log 스케일) ────
-// base: 역할별 기본 크기 / range: ±range 범위로 검색량 비례 변화
+// base: 역할별 기본 크기 / range: 검색량에 따라 base ± range 범위로 가변
 function nodeRadius(d) {
-  const base  = d.depth===0?90:d.isHub?38:d.depth===1?16:d.depth===2?20:12;
-  const range = d.depth===0?0:d.isHub?14:d.depth===1?0:d.depth===2?10:4;
+  const base  = d.depth===0?90:d.isHub?40:d.depth===1?18:d.depth===2?18:12;
+  const range = d.depth===0?0:d.isHub?18:d.depth===1?8:d.depth===2?10:5;
   if (!d.totalVol || range===0 || !nodes.length) return base;
   const peers = nodes.filter(n => d.isHub ? n.isHub : (n.depth===d.depth && !n.isHub));
   const maxVol = Math.max(...peers.map(n=>n.totalVol), 1);
@@ -570,23 +583,18 @@ function nodeTextColor(d) {
 // ── 그래프 렌더 ───────────────────────────────────────
 function updateGraph() {
   const el=document.getElementById('graph');
-  // 회장님 지침: 이미 쏠린 지점(800)을 고정점으로 삼아 쏠림 현상 원천 차단
-  const CX = 800, CY = 440;
+  const W=el.clientWidth||1200, H=el.clientHeight||700;
+  const CX = W/2, CY = H/2;
 
-  // ── PPT 레이아웃 수항 정의 (회장님 전용 응축형 4분면 버전) ───────────
-  // ── PPT 레이아웃 상수 정의 (회장님 전용 응축형 4분면 버전) ───────────
-  // ── PPT 레이아웃 수항 정의 (회장님 전용 응축형 4분면 버전) ───────────
-  const R_SUB      = 100;  // 중앙 노드 외곽을 정갈하게 감싸도록
-  const R_HUB      = 420;  // 4분면 허브 격리
-  const R_ORBIT2   = 90;   // 집단 내 2차 반경
-  const R_ORBIT3   = 160;  // 집단 내 3차 반경 (점선 원 안에 쏙 들어오도록 축소)
-  // ────────────────────────────────────────────────────────────
+  // 레이아웃 상수
+  const R_SUB    = 110;  // 중앙 서브 노드 반경
+  const R_HUB    = Math.min(W, H) * 0.38;  // 4분면 허브 거리 (화면 크기 비례)
+  const R_ORBIT2 = 85;   // 집단 내 2차 반경
+  const R_ORBIT3 = 155;  // 집단 내 3차 반경
+  const CLUSTER_BOUNDARY = 190; // 집단 봉쇄 경계 (halo r=210 안쪽)
 
-  const nHubs = 4;
-  // 완벽한 X자 대칭 ([45, 135, 225, 315]도 방향)
-  const hubAngles = [Math.PI * 1.75, Math.PI * 1.25, Math.PI * 0.75, Math.PI * 0.25];
+  const hubAngles = [Math.PI * 1.75, Math.PI * 1.25, Math.PI * 0.75, Math.PI * 0.25]; // NE, NW, SW, SE
 
-  // 1. 계층별 그룹화 (최적 배치를 위한 인덱싱)
   const memberMap = {};
   nodes.forEach(n => {
     if (n.hubIdx == null) return;
@@ -596,30 +604,27 @@ function updateGraph() {
   });
 
   const nonHubs = nodes.filter(n => n.depth === 1 && !n.isHub);
-  
-  // 2. 모든 노드의 목표 좌표를 기하학적으로 계산 및 박제(fx, fy)
-  nodes.forEach(n => {
-    // 루트: 중앙 고정 (화면 중앙 유지)
-    if (n.depth === 0) { n.fx = CX; n.fy = CY; return; }
 
-    // 1차 서브 노드: 중앙 60px 거리로 꽃잎처럼 밀착 (중첩 차단)
+  // 목표 좌표 계산 — _tx/_ty에 저장 (fx/fy와 분리하여 드래그 후 원위치 복귀에 사용)
+  nodes.forEach(n => {
+    if (n.depth === 0) {
+      n._tx = CX; n._ty = CY;
+      n.fx = CX; n.fy = CY; // 루트는 항상 고정
+      return;
+    }
     if (n.depth === 1 && !n.isHub) {
       const idx = nonHubs.indexOf(n);
       const ang = (idx / (nonHubs.length || 1)) * 2 * Math.PI;
-      n.fx = CX + Math.cos(ang) * R_SUB;
-      n.fy = CY + Math.sin(ang) * R_SUB;
+      n._tx = CX + Math.cos(ang) * R_SUB;
+      n._ty = CY + Math.sin(ang) * R_SUB;
       return;
     }
-
-    // 4분면 허브: 400px 거리로 완전 격리 (중첩 0%)
     if (n.isHub && n.hubIdx != null) {
       const hIdx = n.hubIdx % 4;
-      n.fx = CX + Math.cos(hubAngles[hIdx]) * R_HUB;
-      n.fy = CY + Math.sin(hubAngles[hIdx]) * R_HUB;
+      n._tx = CX + Math.cos(hubAngles[hIdx]) * R_HUB;
+      n._ty = CY + Math.sin(hubAngles[hIdx]) * R_HUB;
       return;
     }
-
-    // 2~3차 자식 노드는 허브를 중심으로 360도 방사형으로 공간을 꽉 채우도록 배치
     if (n.hubIdx != null) {
       const hIdx = n.hubIdx % 4;
       const hx = CX + Math.cos(hubAngles[hIdx]) * R_HUB;
@@ -629,20 +634,38 @@ function updateGraph() {
       const idx = ms.indexOf(n.id);
       const cnt = ms.length || 1;
       const localR = (n.depth === 2) ? R_ORBIT2 : R_ORBIT3;
-      const ang = (idx / cnt) * 2 * Math.PI;
-      n.fx = hx + Math.cos(ang) * localR;
-      n.fy = hy + Math.sin(ang) * localR;
+      // 360도 방사형 배치로 집단 내부를 꽉 채움
+      const ang = (idx / cnt) * 2 * Math.PI - Math.PI / 2;
+      n._tx = hx + Math.cos(ang) * localR;
+      n._ty = hy + Math.sin(ang) * localR;
     }
   });
 
-  // 3. 물리 엔진 튜닝: 박제된 좌표 고수 및 겹침 방지 강화
+  // 집단 봉쇄 힘: depth 2/3 노드가 허브 원 밖을 벗어나지 못하게 함
+  function clusterContain(alpha) {
+    nodes.forEach(n => {
+      if (n.depth < 2 || n.hubIdx == null) return;
+      const hub = nodes.find(h => h.isHub && h.hubIdx === n.hubIdx);
+      if (!hub || hub.x == null || isNaN(hub.x)) return;
+      const dx = (n.x||0) - hub.x, dy = (n.y||0) - hub.y;
+      const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+      if (dist > CLUSTER_BOUNDARY) {
+        const over = (dist - CLUSTER_BOUNDARY) / dist;
+        n.vx -= dx * over * 0.7 * alpha;
+        n.vy -= dy * over * 0.7 * alpha;
+      }
+    });
+  }
+
+  // 물리 엔진: _tx/_ty를 목표로 당기는 힘 사용 (fx/fy가 null이어도 target 유지됨)
   simulation
-    .alphaDecay(0.2)
-    .velocityDecay(0.8)
-    .force('x', d3.forceX(d => d.fx).strength(3.5))
-    .force('y', d3.forceY(d => d.fy).strength(3.5))
-    .force('collision', d3.forceCollide().radius(d => (d.depth === 0 ? 110 : d.isHub ? 45 : 25)).strength(1))
-    .alpha(0.3)
+    .alphaDecay(0.025)
+    .velocityDecay(0.45)
+    .force('x', d3.forceX(d => d._tx || CX).strength(d => d.depth===0?1:d.isHub?0.9:d.depth===1?0.85:0.95))
+    .force('y', d3.forceY(d => d._ty || CY).strength(d => d.depth===0?1:d.isHub?0.9:d.depth===1?0.85:0.95))
+    .force('contain', clusterContain)
+    .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + (d.depth===0?20:d.isHub?14:8)).strength(0.8))
+    .alpha(0.6)
     .restart();
 
   // 링크 (강도 상위 MAX_LINKS_SHOW개)
@@ -804,9 +827,6 @@ function onLeave(e, d) {
 function onClick(e, d) {
   e.stopPropagation();
   if (window.innerWidth <= 768) return;
-  // 회장님 지침: 노드 클릭 시 화면이 0px도 움직이지 않도록 시뮬레이션 즉시 중지 및 고정
-  simulation.alpha(0);
-  simulation.stop();
   showInfoCard(d);
 }
 
@@ -890,7 +910,7 @@ async function collectAll(rootKeyword, rootId, firstLevel) {
     const d2List = arr.filter(x => !nodeIds.has(x.keyword.toLowerCase()) && x.keyword.toLowerCase() !== rootId).slice(0, 6);
     
     d2List.forEach(k2 => {
-      if (nodes.length >= 48) return; // 전체 50개 리미트 준수
+      if (nodes.length >= 68) return; // 전체 70개 리미트
       const id2 = k2.keyword.toLowerCase();
       nodeIds.add(id2);
       nodes.push({ ...k2, id: id2, label: k2.keyword, depth: 2, isHub: false, hubIdx: i });
@@ -905,7 +925,7 @@ async function collectAll(rootKeyword, rootId, firstLevel) {
   updateProgress(80, '세부 3차 연관어 정밀 확장 중...');
   let d3Count = 0;
   for (let cand of d3Candidates) {
-    if (nodes.length >= 50) break;
+    if (nodes.length >= 70) break;
     const arr = await fetchNaverKeywords(cand.keyword);
     const d3Item = arr.find(x => !nodeIds.has(x.keyword.toLowerCase()) && x.keyword.toLowerCase() !== rootId);
     
@@ -973,9 +993,12 @@ async function startSearch(keyword) {
 
   const rootId=keyword.toLowerCase();
   nodeIds.add(rootId);
+  const graphEl = document.getElementById('graph');
+  const initCX = (graphEl?.clientWidth || 1200) / 2;
+  const initCY = (graphEl?.clientHeight || 700) / 2;
   nodes.push({id:rootId,label:keyword,depth:0,
     totalVol:0,pcVol:0,mobileVol:0,pcClicks:0,mobileClicks:0,pcCtr:0,mobileCtr:0,
-    fx:800, fy:440}); // 회장님의 '쏠린 지점 고정' 명령 수행 (800px)
+    fx: initCX, fy: initCY});
 
   try {
     const [firstLevel, trendResult] = await Promise.all([
@@ -999,12 +1022,11 @@ async function startSearch(keyword) {
 
     // 줌 리셋 + 실제 SVG 크기로 루트 좌표 업데이트
     svg.call(zoom.transform, d3.zoomIdentity);
-    // 회장님 지침: 결과 도출 시에도 회장님이 정해주신 800px 절대 좌표 고수
-    if(rn){rn.fx=800;rn.fy=440;}
+    if(rn){ const ge=document.getElementById('graph'); rn.fx=(ge?.clientWidth||1200)/2; rn.fy=(ge?.clientHeight||700)/2; }
 
     const pcAbs=rootStats.pcVol||0, moAbs=rootStats.mobileVol||0;
     renderStats(keyword, firstLevel);
-    renderTrendChart(trendResult?.trend||null, pcAbs, moAbs);
+    renderTrendChart(trendResult?.trend||null, pcAbs, moAbs, trendResult?.lastTrendMonth||null);
     renderGenderAge(trendResult);
 
     if(nodes.length>1) {
@@ -1041,6 +1063,7 @@ document.getElementById('headerInput').addEventListener('keydown',e=>{
   if(e.key==='Enter'){const kw=e.target.value.trim();if(kw){document.getElementById('searchInput').value=kw;startSearch(kw);}}
 });
 const dlBtn=document.getElementById('download-btn');
+const copyTrendBtn=document.getElementById('copy-trend-btn');
 
 function downloadExcel() {
   showToast('준비 중인 기능입니다');
