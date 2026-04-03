@@ -548,11 +548,11 @@ function boundingForce() {
 const simulation=d3.forceSimulation()
   .force('link',d3.forceLink().id(d=>d.id).distance(32).strength(0.45))
   .force('charge',d3.forceManyBody().strength(d=>d.depth===0?-100:d.isHub?-100:d.depth===3?-30:-50).distanceMax(200))
-  .force('center',d3.forceCenter(400,300))
+  // forceCenter 제거: updateGraph에서 forceX/Y로 per-node 개별 목표 관리 (center 충돌 방지)
   .force('collision',d3.forceCollide().radius(d=>nodeRadius(d)+8))
   .force('bounds',boundingForce)
-  .alphaDecay(0.02) // 약간 더 빨리 안정화
-  .velocityDecay(0.4); // 흐느적거림 방지 (더 단단한 느낌)
+  .alphaDecay(0.02)
+  .velocityDecay(0.4);
 
 let nodes=[],links=[];
 const nodeIds=new Set();
@@ -583,14 +583,14 @@ function updateGraph() {
   const CX = W/2, CY = H/2;
 
   // 레이아웃 상수
-  const R_SUB    = 110;  // 중앙 서브 노드 반경
-  // 인접 허브 간 거리 = 1.414 * R_HUB — halo 겹침 방지 조건: R_HUB > halo_r * 2 / 1.414 = halo_r * 1.414
-  // halo_r=175 → 최소 R_HUB=248. 0.44 계수 + 최소 320px 보장
-  const R_HUB    = Math.max(Math.min(W, H) * 0.44, 320);
-  const R_ORBIT2 = 80;   // 집단 내 2차 반경
-  const R_ORBIT3 = 145;  // 집단 내 3차 반경 (봉쇄 경계 안쪽 유지)
-  const HALO_R   = 175;  // halo 시각 원 반지름 (인접 원 겹침 없음: 1.414*320 ≈ 452 > 175*2=350)
-  const CLUSTER_BOUNDARY = 165; // 봉쇄 경계 (halo_r보다 10px 작게 → 노드가 원 안에 유지)
+  const R_SUB    = 100;  // 중앙 서브 노드 반경 (루트 주위 방사형 궤도)
+  // 인접 허브 간 거리 = 1.414 * R_HUB. 겹침 없으려면 > halo_r * 2
+  // halo_r=160 → 최소 R_HUB=226. 0.46 계수 + 최소 340px 보장
+  const R_HUB    = Math.max(Math.min(W, H) * 0.46, 340);
+  const R_ORBIT2 = 75;   // 집단 내 2차 반경
+  const R_ORBIT3 = 135;  // 집단 내 3차 반경
+  const HALO_R   = 160;  // halo 시각 원 반지름 (인접 거리 1.414*340=481 >> 160*2=320 ✅)
+  const CLUSTER_BOUNDARY = 150; // 봉쇄 경계 (halo_r보다 10px 작게)
 
   const hubAngles = [Math.PI * 1.75, Math.PI * 1.25, Math.PI * 0.75, Math.PI * 0.25]; // NE, NW, SW, SE
 
@@ -608,7 +608,8 @@ function updateGraph() {
   nodes.forEach(n => {
     if (n.depth === 0) {
       n._tx = CX; n._ty = CY;
-      n.fx = CX; n.fy = CY; // 루트는 항상 고정
+      // fx/fy를 강제 고정하지 않음 → 드래그 종료 후 forceX/Y(_tx/_ty)로 자연 복귀
+      // 초기 위치만 고정 (startSearch에서 fx=initCX로 설정됨)
       return;
     }
     if (n.depth === 1 && !n.isHub) {
@@ -640,6 +641,19 @@ function updateGraph() {
     }
   });
 
+  // 초기 위치 설정: 처음 로드되었거나 목표에서 크게 벗어난 노드를 목표 위치로 순간이동
+  // → forceCenter(400,300) 제거 후 랜덤 초기 위치로 인한 레이아웃 붕괴 방지
+  nodes.forEach(n => {
+    if (n._tx == null) return;
+    const noPos = (n.x == null || isNaN(n.x));
+    const farFromTarget = Math.abs((n.x||0) - n._tx) > 350 || Math.abs((n.y||0) - n._ty) > 350;
+    if (noPos || farFromTarget) {
+      n.x = n._tx + (Math.random() - 0.5) * 10;
+      n.y = n._ty + (Math.random() - 0.5) * 10;
+      n.vx = 0; n.vy = 0;
+    }
+  });
+
   // 집단 봉쇄 힘: depth 2/3 노드가 허브 원 밖을 벗어나지 못하게 함
   function clusterContain(alpha) {
     nodes.forEach(n => {
@@ -662,8 +676,9 @@ function updateGraph() {
   simulation
     .alphaDecay(0.025)
     .velocityDecay(0.45)
-    .force('x', d3.forceX(d => d._tx || CX).strength(d => d.depth===0?1:d.isHub?0.9:d.depth===1?0.85:0.95))
-    .force('y', d3.forceY(d => d._ty || CY).strength(d => d.depth===0?1:d.isHub?0.9:d.depth===1?0.85:0.95))
+    .force('center', null) // forceCenter 완전 제거 (초기화 잔류 방지)
+    .force('x', d3.forceX(d => d._tx || CX).strength(d => d.depth===0?1:d.isHub?0.95:d.depth===1?0.92:0.97))
+    .force('y', d3.forceY(d => d._ty || CY).strength(d => d.depth===0?1:d.isHub?0.95:d.depth===1?0.92:0.97))
     .force('contain', clusterContain)
     .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + (d.depth===0?20:d.isHub?14:8)).strength(0.8))
     .alpha(0.6)
@@ -705,16 +720,14 @@ function updateGraph() {
       })
       .on('end',(e,d)=>{
         if(!e.active) simulation.alphaTarget(0);
-        // 고정 해제하여 "탄성 회귀" 발동 (targetX, targetY를 향해 돌아감)
-        if (d.depth !== 0) { d.fx = null; d.fy = null; }
-        
+        // 루트 포함 모든 노드 fx/fy 해제 → forceX/Y(_tx/_ty)로 원위치 복귀
+        d.fx = null; d.fy = null;
         if (d.isHub) {
           nodes.forEach(n => {
-            if (n.hubIdx === d.hubIdx) {
-              n.fx = null; n.fy = null;
-            }
+            if (n.hubIdx === d.hubIdx) { n.fx = null; n.fy = null; }
           });
         }
+        simulation.alpha(0.4).restart();
       }))
       .on('mouseenter',onHover).on('mouseleave',onLeave).on('click',onClick);
   }
@@ -805,7 +818,7 @@ function renderHalos() {
     d3.select(this).select('.ch-fill')
       .attr('cx', hub.x)
       .attr('cy', hub.y)
-      .attr('r', 175) // HALO_R=175: 인접 원 겹침 방지 (1.414*320≈452 > 175*2=350)
+      .attr('r', 160) // HALO_R=160: 인접 거리 1.414*340=481 >> 160*2=320 ✅
       .attr('fill', color).attr('fill-opacity', 0.05)
       .attr('stroke', color).attr('stroke-width', 2)
       .attr('stroke-dasharray', '8,4')

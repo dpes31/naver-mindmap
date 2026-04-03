@@ -347,6 +347,8 @@ header.hidden { display: none; }
   margin-top: 12px;
   position: sticky; top: 0; z-index: 5;
   will-change: transform;
+  width: 100%; max-width: 100%; /* 좌우 레이아웃 삐져나옴 방지 */
+  overflow: hidden;
 }
 .mindmap-margin {
   flex: 0 0 var(--margin);
@@ -447,13 +449,13 @@ header.hidden { display: none; }
 
 /* ── 인포 패널 (카드 스타일) ── */
 #info-panel {
-  position: absolute; bottom: 24px; right: 24px;
-  background: #FFFFFF !important; /* 투명도 제거, 순백색 박제 */
+  position: fixed; bottom: 24px; right: 24px; /* fixed: 스크롤 위치 무관하게 뷰포트 우하단 고정 */
+  background: #FFFFFF !important;
   border: 1px solid rgba(0,0,0,0.1);
   border-radius: 16px; padding: 20px;
   box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
   font-size: 13px; color: var(--muted);
-  display: none; width: 260px; z-index: 9999; /* 최상단 노출 */
+  display: none; width: 260px; z-index: 9999;
 }
 #info-panel.visible { display: block !important; }
 .info-stats { margin-bottom: 0; }
