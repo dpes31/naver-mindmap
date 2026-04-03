@@ -218,18 +218,14 @@ function scaleTrend(trend, pcAbs, moAbs, lastTrendMonth) {
   if (!trend?.length) return trend;
   const last = trend[trend.length - 1];
 
-  // 월 불일치 감지: 현재 날짜가 새 달 초(1~7일)이고 lastTrendMonth가 2달 이전이면 앵커링 스킵
+  // lastTrendMonth(DataLab 마지막 월)가 전달보다 이전이면 앵커 기준 불일치 → 스케일 스킵
   const now = new Date();
-  const currentYM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   const prevYM = (() => {
     const d = new Date(now.getFullYear(), now.getMonth(), 0);
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
   })();
-  // Search Ads rolling 30일값이 신뢰 불가한 경우: 새 달 1~10일
-  const isMonthBoundary = now.getDate() <= 10;
-  // lastTrendMonth가 전전달 이하라면 앵커링 기준 불일치
   const anchorMismatch = lastTrendMonth && lastTrendMonth < prevYM;
-  const skipScale = isMonthBoundary || anchorMismatch;
+  const skipScale = !!anchorMismatch;
 
   const pcRef = last?.pc || 1, moRef = last?.mo || 1;
   return trend.map(d=>({
