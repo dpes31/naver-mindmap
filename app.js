@@ -404,14 +404,21 @@ function renderGenderAge(data) {
 // ── 노드 반경 (검색량 비례 — 같은 depth 내 log 스케일) ────
 // base: 역할별 기본 크기 / range: 검색량에 따라 base ± range 범위로 가변
 function nodeRadius(d) {
-  const base  = d.depth===0?90:d.isHub?40:d.depth===1?18:d.depth===2?18:12;
-  const range = d.depth===0?0:d.isHub?18:d.depth===1?8:d.depth===2?10:5;
-  if (!d.totalVol || range===0 || !nodes.length) return base;
-  const peers = nodes.filter(n => d.isHub ? n.isHub : (n.depth===d.depth && !n.isHub));
-  const maxVol = Math.max(...peers.map(n=>n.totalVol), 1);
-  const scale  = Math.log1p(d.totalVol) / Math.log1p(maxVol); // 0~1
-  // 검색량 0인 노드는 최소 크기, 최대 검색량은 base+range
-  return Math.round((base - range) + scale * range * 2);
+  if (d.depth === 0) return 90;
+  // 검색량 기반 가변 크기: sqrt 스케일 (log보다 시각적 차이 뚜렷)
+  const [minR, maxR] = d.isHub     ? [30, 65]   // 허브: 30~65px (2배 이상 차이 가능)
+                     : d.depth===1 ? [14, 22]   // 1차 서브
+                     : d.depth===2 ? [11, 26]   // 2차
+                     :               [7,  14];  // 3차
+  if (!d.totalVol || !nodes.length) return minR;
+  // 허브는 4개 전체 비교, 나머지는 같은 클러스터 내 같은 depth끼리 비교
+  const peers = d.isHub
+    ? nodes.filter(n => n.isHub)
+    : nodes.filter(n => n.depth === d.depth && n.hubIdx === d.hubIdx);
+  const maxVol = Math.max(...peers.map(n => n.totalVol || 0), 1);
+  if (maxVol === 0) return minR;
+  const scale = Math.sqrt(d.totalVol / maxVol); // sqrt: log보다 차이 크게 반영
+  return Math.round(minR + (maxR - minR) * scale);
 }
 
 function linkWidth(d) {
@@ -604,12 +611,23 @@ function updateGraph() {
 
   const nonHubs = nodes.filter(n => n.depth === 1 && !n.isHub);
 
-  // 목표 좌표 계산 — _tx/_ty에 저장 (fx/fy와 분리하여 드래그 후 원위치 복귀에 사용)
+  // ── 목표 좌표 계산 (2단계) ────────────────────────────────────────────────────
+  // links에서 depth-3 → depth-2 부모 관계 추출 (시뮬레이션 실행 전후 모두 대응)
+  const getId = v => (v && typeof v === 'object') ? v.id : v;
+  const parentMap = {}; // depth-3 nodeId → depth-2 nodeId
+  nodes.forEach(n => {
+    if (n.depth !== 3) return;
+    const pl = links.find(l => getId(l.target) === n.id);
+    if (pl) parentMap[n.id] = getId(pl.source);
+  });
+
+  const d2AngleMap = {}; // depth-2 nodeId → 허브 기준 각도(rad) — depth-3 인접 배치에 사용
+
+  // 1단계: depth-0, 1차 서브, 허브, depth-2 목표 좌표 계산
   nodes.forEach(n => {
     if (n.depth === 0) {
       n._tx = CX; n._ty = CY;
       // fx/fy를 강제 고정하지 않음 → 드래그 종료 후 forceX/Y(_tx/_ty)로 자연 복귀
-      // 초기 위치만 고정 (startSearch에서 fx=initCX로 설정됨)
       return;
     }
     if (n.depth === 1 && !n.isHub) {
@@ -625,19 +643,49 @@ function updateGraph() {
       n._ty = CY + Math.sin(hubAngles[hIdx]) * R_HUB;
       return;
     }
-    if (n.hubIdx != null) {
+    if (n.depth === 2 && n.hubIdx != null) {
       const hIdx = n.hubIdx % 4;
       const hx = CX + Math.cos(hubAngles[hIdx]) * R_HUB;
       const hy = CY + Math.sin(hubAngles[hIdx]) * R_HUB;
-      const key = `${n.hubIdx}-${n.depth}`;
-      const ms = memberMap[key] || [];
-      const idx = ms.indexOf(n.id);
-      const cnt = ms.length || 1;
-      const localR = (n.depth === 2) ? R_ORBIT2 : R_ORBIT3;
-      // 360도 방사형 배치로 집단 내부를 꽉 채움
+      const d2List = memberMap[`${n.hubIdx}-2`] || [];
+      const idx = d2List.indexOf(n.id);
+      const cnt = d2List.length || 1;
       const ang = (idx / cnt) * 2 * Math.PI - Math.PI / 2;
-      n._tx = hx + Math.cos(ang) * localR;
-      n._ty = hy + Math.sin(ang) * localR;
+      d2AngleMap[n.id] = ang; // depth-3 자식이 부모 각도로 fan 배치할 때 사용
+      n._tx = hx + Math.cos(ang) * R_ORBIT2;
+      n._ty = hy + Math.sin(ang) * R_ORBIT2;
+    }
+  });
+
+  // 2단계: depth-3 노드를 부모 depth-2 방향 주변에 fan 배치 (쿠폰↔해외직구 인접)
+  nodes.forEach(n => {
+    if (n.depth !== 3 || n.hubIdx == null) return;
+    const hIdx = n.hubIdx % 4;
+    const hx = CX + Math.cos(hubAngles[hIdx]) * R_HUB;
+    const hy = CY + Math.sin(hubAngles[hIdx]) * R_HUB;
+
+    const parentId = parentMap[n.id];
+    const parentAng = (parentId != null && d2AngleMap[parentId] != null)
+      ? d2AngleMap[parentId] : null;
+
+    if (parentAng != null) {
+      // 같은 depth-2 부모를 공유하는 형제 depth-3 노드들
+      const siblings = nodes.filter(s => s.depth === 3 && parentMap[s.id] === parentId);
+      const sibIdx = siblings.indexOf(n);
+      const sibCnt = siblings.length || 1;
+      // 부모 방향 주변에 fan: 형제 1개면 정중앙, 여러 개면 ±(30°×형제수) 범위로 분산
+      const spread = sibCnt === 1 ? 0 : Math.min(Math.PI * 0.6, (Math.PI / 5) * sibCnt);
+      const offset = sibCnt === 1 ? 0 : (sibIdx / (sibCnt - 1) - 0.5) * spread;
+      n._tx = hx + Math.cos(parentAng + offset) * R_ORBIT3;
+      n._ty = hy + Math.sin(parentAng + offset) * R_ORBIT3;
+    } else {
+      // 부모 미확인 시 균등 분포 폴백
+      const d3List = memberMap[`${n.hubIdx}-3`] || [];
+      const idx = d3List.indexOf(n.id);
+      const cnt = d3List.length || 1;
+      const ang = (idx / cnt) * 2 * Math.PI - Math.PI / 2;
+      n._tx = hx + Math.cos(ang) * R_ORBIT3;
+      n._ty = hy + Math.sin(ang) * R_ORBIT3;
     }
   });
 
