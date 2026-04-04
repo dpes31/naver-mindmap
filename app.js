@@ -553,12 +553,27 @@ function boundingForce() {
 }
 
 const simulation=d3.forceSimulation()
-  .force('link',d3.forceLink().id(d=>d.id).distance(32).strength(0.45))
-  // 1차 서브(depth-1 비허브) charge를 낮춰 허브 반발력에 밀리는 현상 방지
+  .force('link',d3.forceLink().id(d=>d.id)
+    // 루트→허브 link는 forceX/Y에 맡김(strength=0), 하위 link는 약한 spring만 유지
+    .distance(l => {
+      const s = l.source?.depth != null ? l.source : nodes.find(n=>n.id===l.source);
+      const t = l.target?.depth != null ? l.target : nodes.find(n=>n.id===l.target);
+      if (s?.depth===0 && t?.isHub) return 340;
+      if (s?.isHub && t?.depth===2) return 75;
+      return 32;
+    })
+    .strength(l => {
+      const s = l.source?.depth != null ? l.source : nodes.find(n=>n.id===l.source);
+      const t = l.target?.depth != null ? l.target : nodes.find(n=>n.id===l.target);
+      if (s?.depth===0 && t?.isHub) return 0.0;
+      if (s?.isHub && t?.depth===2) return 0.05;
+      return 0.35;
+    })
+  )
   .force('charge',d3.forceManyBody().strength(d=>
     d.depth===0 ? -120 :
     d.isHub ? -100 :
-    (d.depth===1 && !d.isHub) ? -15 : // 서브 노드: 약한 charge → forceX/Y 우세
+    (d.depth===1 && !d.isHub) ? 0 : // 서브 노드: charge 0 → forceX/Y 완전 우세
     d.depth===3 ? -25 : -45
   ).distanceMax(200))
   // forceCenter 제거: updateGraph에서 forceX/Y로 per-node 개별 목표 관리 (center 충돌 방지)
@@ -593,10 +608,10 @@ function nodeTextColor(d) {
 function updateGraph() {
   const el=document.getElementById('graph');
   const W=el.clientWidth||1200, H=el.clientHeight||700;
-  // 전체화면 모드에서 헤더 높이(약 50px)만큼 CY를 아래로 보정하여 상단 클러스터 가림 방지
-  const headerEl = el.closest('.mindmap-content-wrap')?.querySelector('.mindmap-header');
-  const headerH = headerEl ? headerEl.offsetHeight : 50;
-  const CX = W/2, CY = (H + headerH) / 2;
+  const CX = W/2, CY = H / 2;
+  // 전체화면 전환 후 루트 노드 위치 갱신 (fx/fy가 이전 크기로 고정되어 있을 수 있음)
+  const rootNode = nodes.find(n => n.depth === 0);
+  if (rootNode) { rootNode.fx = CX; rootNode.fy = CY; }
 
   // 레이아웃 상수
   const R_SUB    = 100;  // 중앙 서브 노드 반경 (루트 주위 방사형 궤도)
