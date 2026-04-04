@@ -554,7 +554,13 @@ function boundingForce() {
 
 const simulation=d3.forceSimulation()
   .force('link',d3.forceLink().id(d=>d.id).distance(32).strength(0.45))
-  .force('charge',d3.forceManyBody().strength(d=>d.depth===0?-100:d.isHub?-100:d.depth===3?-30:-50).distanceMax(200))
+  // 1차 서브(depth-1 비허브) charge를 낮춰 허브 반발력에 밀리는 현상 방지
+  .force('charge',d3.forceManyBody().strength(d=>
+    d.depth===0 ? -120 :
+    d.isHub ? -100 :
+    (d.depth===1 && !d.isHub) ? -15 : // 서브 노드: 약한 charge → forceX/Y 우세
+    d.depth===3 ? -25 : -45
+  ).distanceMax(200))
   // forceCenter 제거: updateGraph에서 forceX/Y로 per-node 개별 목표 관리 (center 충돌 방지)
   .force('collision',d3.forceCollide().radius(d=>nodeRadius(d)+8))
   .force('bounds',boundingForce)
@@ -587,7 +593,10 @@ function nodeTextColor(d) {
 function updateGraph() {
   const el=document.getElementById('graph');
   const W=el.clientWidth||1200, H=el.clientHeight||700;
-  const CX = W/2, CY = H/2;
+  // 전체화면 모드에서 헤더 높이(약 50px)만큼 CY를 아래로 보정하여 상단 클러스터 가림 방지
+  const headerEl = el.closest('.mindmap-content-wrap')?.querySelector('.mindmap-header');
+  const headerH = headerEl ? headerEl.offsetHeight : 50;
+  const CX = W/2, CY = (H + headerH) / 2;
 
   // 레이아웃 상수
   const R_SUB    = 100;  // 중앙 서브 노드 반경 (루트 주위 방사형 궤도)
@@ -712,10 +721,9 @@ function updateGraph() {
       const dist = Math.sqrt(dx*dx + dy*dy) || 1;
       if (dist > CLUSTER_BOUNDARY) {
         const over = (dist - CLUSTER_BOUNDARY) / dist;
-        // alpha가 낮아도 최소 0.25 강도 유지 → 경계 탈출 방지
-        const strength = Math.max(alpha, 0.25);
-        n.vx -= dx * over * 1.5 * strength;
-        n.vy -= dy * over * 1.5 * strength;
+        // alpha 무관하게 강한 고정값 사용 → 경계 탈출 원천 차단
+        n.vx -= dx * over * 2.5;
+        n.vy -= dy * over * 2.5;
       }
     });
   }
@@ -725,8 +733,9 @@ function updateGraph() {
     .alphaDecay(0.025)
     .velocityDecay(0.45)
     .force('center', null) // forceCenter 완전 제거 (초기화 잔류 방지)
-    .force('x', d3.forceX(d => d._tx || CX).strength(d => d.depth===0?1:d.isHub?0.95:d.depth===1?0.92:0.97))
-    .force('y', d3.forceY(d => d._ty || CY).strength(d => d.depth===0?1:d.isHub?0.95:d.depth===1?0.92:0.97))
+    // 1차 서브 연관(depth-1 비허브): charge 낮췄으므로 forceX 강도도 1.0으로 고정하여 루트 궤도 사수
+    .force('x', d3.forceX(d => d._tx || CX).strength(d => d.depth===0?1:d.isHub?0.95:(d.depth===1&&!d.isHub)?1.0:0.97))
+    .force('y', d3.forceY(d => d._ty || CY).strength(d => d.depth===0?1:d.isHub?0.95:(d.depth===1&&!d.isHub)?1.0:0.97))
     .force('contain', clusterContain)
     .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + (d.depth===0?20:d.isHub?14:8)).strength(0.8))
     .alpha(0.6)
@@ -1144,27 +1153,34 @@ svg.call(zoom.transform,d3.zoomIdentity);
 renderGenderAge(null);
 
 // ── 마인드맵 전체화면 동작 (Viewport CSS 기반으로 100% 신뢰성 확보) ─────────────────
+let _savedScrollY = 0; // 전체화면 진입 전 스크롤 위치 저장
+
 window.toggleFullscreen = function() {
   const outer = document.querySelector('.mindmap-outer');
   const fsBtn = document.getElementById('fs-btn');
   if(!outer) return;
 
-  // 네이티브 API의 불안정성을 배제하고 CSS 클래스 토글만으로 100% 작동 보장
   const isCurrentlyFS = outer.classList.contains('fullscreen-mode');
-  
+
   if(!isCurrentlyFS) {
+    // 전체화면 진입: 스크롤 위치 저장 후 고정
+    _savedScrollY = window.scrollY;
     outer.classList.add('fullscreen-mode');
     if(fsBtn) fsBtn.textContent = '기본화면 ✖';
-    // 브라우저 기본 스크롤 차단
     document.body.style.overflow = 'hidden';
   } else {
+    // 전체화면 종료: 클래스 제거 후 저장된 위치로 복원
     outer.classList.remove('fullscreen-mode');
     if(fsBtn) fsBtn.textContent = '전체화면 ⛶';
     document.body.style.overflow = '';
+    // 종료 후 마인드맵 섹션 유지 (최상단으로 튀는 현상 방지)
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: _savedScrollY, behavior: 'instant' });
+    });
   }
-  
-  // 레이아웃 재계산을 위해 updateGraph 직접 호출 (불필요한 resize 지연 제거)
-  updateGraph();
+
+  // CSS reflow 완료 후(2프레임) updateGraph 호출 → 정확한 clientWidth/Height 사용
+  requestAnimationFrame(() => requestAnimationFrame(() => updateGraph()));
 };
 
 // Esc 키로 탈출 가능하도록 추가
