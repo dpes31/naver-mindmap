@@ -283,7 +283,15 @@ function renderTrendChart(trendData, pcAbsNow, moAbsNow, lastTrendMonth) {
   ).selectAll('line').attr('stroke','#e5e7eb').attr('stroke-dasharray','3,3');
   svg.select('.grid .domain').remove();
 
-  const xAx=svg.append('g').attr('transform',`translate(0,${h})`).call(d3.axisBottom(x).tickFormat(d=>(d&&typeof d==='string'?d.slice(2):d)));
+  // 모바일 등 좁은 컨테이너에서 날짜 레이블 겹침 방지: 표시 가능한 개수에 맞게 tick 간격 자동 조정
+  const tickVals = (() => {
+    const domain = data.map(d => d.period);
+    const step = Math.max(1, Math.ceil(domain.length / Math.floor(w / 35)));
+    return domain.filter((_, i) => i % step === 0 || i === domain.length - 1);
+  })();
+  const xAx=svg.append('g').attr('transform',`translate(0,${h})`).call(
+    d3.axisBottom(x).tickValues(tickVals).tickFormat(d=>(d&&typeof d==='string'?d.slice(2):d))
+  );
   xAx.selectAll('text').attr('font-size',10).attr('fill','#6b7280');
   xAx.select('.domain').attr('stroke','#e5e7eb');
 
@@ -543,12 +551,13 @@ svg.call(zoom.transform, d3.zoomIdentity.translate(_gW/2, _gH/2).scale(0.4).tran
 function boundingForce() {
   const el=document.getElementById('graph');
   const W=el.clientWidth||800, H=el.clientHeight||600, pad=100;
+  const bW = W < 600 ? 900 : W, bH = W < 600 ? 700 : H;
   nodes.forEach(n=>{
     if(n.depth===0) return;
-    if(n.x<pad)    n.vx+=(pad-n.x)*0.4;
-    if(n.x>W-pad)  n.vx+=(W-pad-n.x)*0.4;
-    if(n.y<pad)    n.vy+=(pad-n.y)*0.4;
-    if(n.y>H-pad)  n.vy+=(H-pad-n.y)*0.4;
+    if(n.x<pad)     n.vx+=(pad-n.x)*0.4;
+    if(n.x>bW-pad)  n.vx+=(bW-pad-n.x)*0.4;
+    if(n.y<pad)     n.vy+=(pad-n.y)*0.4;
+    if(n.y>bH-pad)  n.vy+=(bH-pad-n.y)*0.4;
   });
 }
 
@@ -608,7 +617,18 @@ function nodeTextColor(d) {
 function updateGraph() {
   const el=document.getElementById('graph');
   const W=el.clientWidth||1200, H=el.clientHeight||700;
-  const CX = W/2, CY = H / 2;
+  // 모바일(W<600): 900×700 가상 좌표 공간으로 레이아웃 → viewBox로 자동 축소 표시
+  // PC는 기존 그대로 유지
+  const isMobile = W < 600;
+  const layoutW = isMobile ? 900 : W;
+  const layoutH = isMobile ? 700 : H;
+  if (isMobile) {
+    svg.attr('viewBox', '0 0 900 700').attr('preserveAspectRatio', 'xMidYMid meet');
+    svg.call(zoom.transform, d3.zoomIdentity);
+  } else {
+    svg.attr('viewBox', null);
+  }
+  const CX = layoutW/2, CY = layoutH / 2;
   // 전체화면 전환 후 루트 노드 위치 갱신 (fx/fy가 이전 크기로 고정되어 있을 수 있음)
   const rootNode = nodes.find(n => n.depth === 0);
   if (rootNode) { rootNode.fx = CX; rootNode.fy = CY; }
@@ -617,7 +637,7 @@ function updateGraph() {
   const R_SUB    = 100;  // 중앙 서브 노드 반경 (루트 주위 방사형 궤도)
   // 인접 허브 간 거리 = 1.414 * R_HUB. 겹침 없으려면 > halo_r * 2
   // halo_r=160 → 최소 R_HUB=226. 0.46 계수 + 최소 340px 보장
-  const R_HUB    = Math.max(Math.min(W, H) * 0.46, 340);
+  const R_HUB    = Math.max(Math.min(layoutW, layoutH) * 0.46, 340);
   const R_ORBIT2 = 75;   // 집단 내 2차 반경
   const R_ORBIT3 = 135;  // 집단 내 3차 반경
   const HALO_R   = 160;  // halo 시각 원 반지름 (인접 거리 1.414*340=481 >> 160*2=320 ✅)
