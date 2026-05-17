@@ -451,7 +451,8 @@ function renderGenderAge(data) {
             <span class="female-val">여 ${g.femaleMo}%</span>
           </div>
         </div>
-      </div>`;
+      </div>
+      <div class="ga-disclaimer">※ DataLab 상대지수 기반 추정치로 실제 수치와 다를 수 있습니다</div>`;
   } else {
     gs.innerHTML = `<div class="ga-title">성별 검색 비율</div>
       <div class="ga-placeholder">Vercel에 NAVER_DATALAB_CLIENT_ID / SECRET 입력 후 표시됩니다</div>`;
@@ -470,7 +471,8 @@ function renderGenderAge(data) {
             <div class="age-rank-label">${label}</div>
             <div class="age-rank-pct">${pct}%</div>
           </div>`).join('')}
-      </div>`;
+      </div>
+      <div class="ga-disclaimer">※ DataLab 상대지수 기반 추정치로 실제 수치와 다를 수 있습니다</div>`;
   } else {
     as.innerHTML = `<div class="ga-title">연령별 검색 비율</div>
       <div class="ga-placeholder">Vercel에 NAVER_DATALAB_CLIENT_ID / SECRET 입력 후 표시됩니다</div>`;
