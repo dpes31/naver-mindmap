@@ -332,13 +332,63 @@ header.hidden { display: none; }
 .male-val   { font-size: 11px; font-weight: 600; color: #1E40AF; }
 .female-val { font-size: 11px; font-weight: 600; color: #EC4899; }
 
-/* 연령 바 */
-.age-bars { display: flex; flex-direction: column; gap: 7px; }
-.age-row { display: flex; align-items: center; gap: 8px; }
-.age-label { font-size: 11px; font-weight: 600; color: var(--muted); width: 36px; flex-shrink: 0; }
-.age-track { flex: 1; height: 14px; background: #f0f1f3; border-radius: 7px; overflow: hidden; }
-.age-fill { height: 100%; border-radius: 7px; background: linear-gradient(90deg, #1E40AF, #6366f1, #a78bfa); transition: width 0.6s; }
-.age-val { font-size: 11px; font-weight: 600; color: var(--text); width: 38px; text-align: right; flex-shrink: 0; }
+/* 연령 순위형 */
+.age-rank-wrap {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding-top: 4px;
+}
+.age-rank-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 4px 8px;
+  border-radius: 10px;
+  background: #f8f9fb;
+  border: 1.5px solid transparent;
+  transition: transform 0.2s;
+}
+.age-rank-item:hover { transform: translateY(-2px); }
+.age-rank-no {
+  font-size: 10px;
+  font-weight: 700;
+  color: #9ca3af;
+  letter-spacing: 0.3px;
+}
+.age-rank-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.age-rank-pct {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6366f1;
+}
+/* 순위별 강조 */
+.age-rank-item.rank-1 {
+  background: linear-gradient(135deg, #ede9fe, #ddd6fe);
+  border-color: #a78bfa;
+}
+.age-rank-item.rank-1 .age-rank-no  { color: #7c3aed; }
+.age-rank-item.rank-1 .age-rank-label { font-size: 15px; color: #5b21b6; }
+.age-rank-item.rank-1 .age-rank-pct  { font-size: 13px; color: #7c3aed; }
+.age-rank-item.rank-2 {
+  background: linear-gradient(135deg, #eff6ff, #dbeafe);
+  border-color: #93c5fd;
+}
+.age-rank-item.rank-2 .age-rank-label { color: #1e40af; }
+.age-rank-item.rank-2 .age-rank-pct  { color: #1e40af; }
+.age-rank-item.rank-3 {
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  border-color: #86efac;
+}
+.age-rank-item.rank-3 .age-rank-label { color: #166534; }
+.age-rank-item.rank-3 .age-rank-pct  { color: #16a34a; }
 
 /* ── 마인드맵 섹션 ── */
 .mindmap-outer {

@@ -440,16 +440,17 @@ function renderGenderAge(data) {
   }
 
   if (data?.ages) {
-    const entries = Object.entries(data.ages);
-    const maxPct = Math.max(...entries.map(([,v])=>v), 1);
+    const sorted = Object.entries(data.ages)
+      .sort(([,a],[,b]) => b - a); // 비율 내림차순
+    const rankLabels = ['1위','2위','3위','4위','5위'];
     as.innerHTML = `
       <div class="ga-title">연령별 검색 비율</div>
-      <div class="age-bars">
-        ${entries.map(([label,pct])=>`
-          <div class="age-row">
-            <div class="age-label">${label}</div>
-            <div class="age-track"><div class="age-fill" style="width:${Math.round(pct/maxPct*100)}%"></div></div>
-            <div class="age-val">${pct}%</div>
+      <div class="age-rank-wrap">
+        ${sorted.map(([label,pct], i) => `
+          <div class="age-rank-item rank-${i+1}">
+            <div class="age-rank-no">${rankLabels[i]||''}</div>
+            <div class="age-rank-label">${label}</div>
+            <div class="age-rank-pct">${pct}%</div>
           </div>`).join('')}
       </div>`;
   } else {
