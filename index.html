@@ -60,7 +60,10 @@
           <span class="panel-main-title">연관 키워드</span>
         </div>
         <div class="panel-sub-row">
-          <span class="panel-sub-note" style="margin-left:auto">검색량 많은 순 정렬 · TOP 5</span>
+          <div class="sort-toggle-wrap" style="margin-left:auto">
+            <button class="sort-btn active" data-mode="relevance" onclick="setSort('relevance')">연관도 기준</button>
+            <button class="sort-btn" data-mode="volume" onclick="setSort('volume')">검색량 기준</button>
+          </div>
         </div>
         <div class="cards-panel" id="kw-cards"></div>
       </div>

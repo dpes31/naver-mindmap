@@ -54,18 +54,20 @@ module.exports = async (req, res) => {
     };
 
     // 전체 stats 반환 (이름만 아니라 검색량·클릭수·CTR 포함)
+    // relevanceRank: API 응답 원본 인덱스 = 네이버 내부 연관도 순위 (낮을수록 연관도 높음)
     const keywords = (data.keywordList || [])
       .filter(item => item.relKeyword)
-      .map(item => ({
-        keyword:      item.relKeyword,
-        pcVol:        toNum(item.monthlyPcQcCnt),
-        mobileVol:    toNum(item.monthlyMobileQcCnt),
-        totalVol:     toNum(item.monthlyPcQcCnt) + toNum(item.monthlyMobileQcCnt),
-        pcClicks:     toNum(item.monthlyAvePcClkCnt),
-        mobileClicks: toNum(item.monthlyAveMobileClkCnt),
-        pcCtr:        toNum(item.monthlyAvePcCtr),
-        mobileCtr:    toNum(item.monthlyAveMobileCtr),
-        compIdx:      item.compIdx || '',
+      .map((item, i) => ({
+        keyword:       item.relKeyword,
+        relevanceRank: i,
+        pcVol:         toNum(item.monthlyPcQcCnt),
+        mobileVol:     toNum(item.monthlyMobileQcCnt),
+        totalVol:      toNum(item.monthlyPcQcCnt) + toNum(item.monthlyMobileQcCnt),
+        pcClicks:      toNum(item.monthlyAvePcClkCnt),
+        mobileClicks:  toNum(item.monthlyAveMobileClkCnt),
+        pcCtr:         toNum(item.monthlyAvePcCtr),
+        mobileCtr:     toNum(item.monthlyAveMobileCtr),
+        compIdx:       item.compIdx || '',
       }))
       .sort((a, b) => b.totalVol - a.totalVol)
       .slice(0, 100);

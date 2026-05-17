@@ -594,3 +594,30 @@ header.hidden { display: none; }
   /* mm-fs-btn 비활성화 해제 - 전체화면 사용 가능하도록 */
   .mm-fs-btn { display: inline-block !important; z-index: 999999 !important; position: relative; }
 }
+
+/* ── 연관도/검색량 정렬 토글 버튼 ── */
+.sort-toggle-wrap {
+  display: flex;
+  gap: 4px;
+}
+.sort-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.sort-btn:hover {
+  border-color: #10B981;
+  color: #10B981;
+}
+.sort-btn.active {
+  background: #10B981;
+  color: #fff;
+  border-color: #10B981;
+}
