@@ -19,6 +19,55 @@ const MAX_LINKS_SHOW = 120; // 60 -> 120 (연결선 가독성 범위 확대)
 const MAX_DEPTH      = 3;
 let currentClusters  = [];
 let currentKeyword   = '';
+let sortMode         = 'relevance'; // 'relevance' | 'volume' — 기본값: 연관도 기준
+let cachedFirstLevel = [];          // API 원본 데이터 캐시 (재정렬 시 재활용)
+
+// ── 정렬 모드 헬퍼 ─────────────────────────────────────
+function getSortedFirst() {
+  if (!cachedFirstLevel.length) return [];
+  const copy = [...cachedFirstLevel];
+  return sortMode === 'volume'
+    ? copy.sort((a, b) => b.totalVol - a.totalVol)
+    : copy.sort((a, b) => (a.relevanceRank ?? 0) - (b.relevanceRank ?? 0));
+}
+
+window.setSort = async function(mode) {
+  if (mode === sortMode || !currentKeyword || !cachedFirstLevel.length) return;
+  sortMode = mode;
+
+  document.querySelectorAll('.sort-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.mode === mode)
+  );
+
+  const sorted = getSortedFirst();
+  renderStats(currentKeyword, sorted);
+
+  // 허브가 바뀌므로 마인드맵 전체 재구성 (depth-2/3 재수집 포함)
+  nodes = []; links = []; nodeIds.clear(); currentClusters = [];
+  halosG.selectAll('*').remove(); linksG.selectAll('*').remove(); nodesG.selectAll('*').remove();
+
+  const rootId = currentKeyword.toLowerCase();
+  nodeIds.add(rootId);
+  const graphEl = document.getElementById('graph');
+  nodes.push({ id: rootId, label: currentKeyword, depth: 0,
+    totalVol: 0, pcVol: 0, mobileVol: 0, pcClicks: 0, mobileClicks: 0, pcCtr: 0, mobileCtr: 0,
+    fx: (graphEl?.clientWidth || 1200) / 2, fy: (graphEl?.clientHeight || 700) / 2 });
+
+  setLoading(true, '마인드맵 재구성 중...');
+  try {
+    await collectAll(currentKeyword, rootId, sorted);
+    svg.call(zoom.transform, d3.zoomIdentity);
+    const rn = nodes.find(n => n.id === rootId);
+    if (rn) { const ge = document.getElementById('graph'); rn.fx = (ge?.clientWidth||1200)/2; rn.fy = (ge?.clientHeight||700)/2; }
+    updateGraph();
+    showToast(`${mode === 'relevance' ? '연관도' : '검색량'} 기준으로 재구성 완료`);
+  } catch(e) {
+    console.error('setSort error:', e);
+    showToast('재구성 중 오류가 발생했습니다.');
+  } finally {
+    setLoading(false);
+  }
+};
 
 // ── DOM 요소 선언 (누락된 변수 정의) ──────────────────
 const infoPanelEl = document.getElementById('info-panel');
@@ -391,16 +440,17 @@ function renderGenderAge(data) {
   }
 
   if (data?.ages) {
-    const entries = Object.entries(data.ages);
-    const maxPct = Math.max(...entries.map(([,v])=>v), 1);
+    const sorted = Object.entries(data.ages)
+      .sort(([,a],[,b]) => b - a); // 비율 내림차순
+    const rankLabels = ['1위','2위','3위','4위','5위'];
     as.innerHTML = `
       <div class="ga-title">연령별 검색 비율</div>
-      <div class="age-bars">
-        ${entries.map(([label,pct])=>`
-          <div class="age-row">
-            <div class="age-label">${label}</div>
-            <div class="age-track"><div class="age-fill" style="width:${Math.round(pct/maxPct*100)}%"></div></div>
-            <div class="age-val">${pct}%</div>
+      <div class="age-rank-wrap">
+        ${sorted.map(([label,pct], i) => `
+          <div class="age-rank-item rank-${i+1}">
+            <div class="age-rank-no">${rankLabels[i]||''}</div>
+            <div class="age-rank-label">${label}</div>
+            <div class="age-rank-pct">${pct}%</div>
           </div>`).join('')}
       </div>`;
   } else {
@@ -1112,14 +1162,18 @@ async function startSearch(keyword) {
       fetchTrend(keyword),
     ]);
 
+    // API 원본 캐시 저장 (정렬 토글 시 재활용)
+    cachedFirstLevel = firstLevel;
+    const sortedFirst = getSortedFirst();
+
     // root 노드 stats 업데이트
     const normKw=keyword.toLowerCase().trim();
     const rootStats=firstLevel.find(d=>d.keyword.toLowerCase().trim()===normKw)||firstLevel[0]||{};
     const rn=nodes.find(n=>n.id===rootId);
     if(rn) Object.assign(rn,{totalVol:rootStats.totalVol||0,pcVol:rootStats.pcVol||0,mobileVol:rootStats.mobileVol||0});
 
-    // 전수 BFS 수집
-    await collectAll(keyword, rootId, firstLevel);
+    // 전수 BFS 수집 (현재 정렬 기준 적용)
+    await collectAll(keyword, rootId, sortedFirst);
     console.log('Step 2: Collection Complete, Nodes:', nodes.length);
 
     // 데이터 준비 완료 → 결과 화면 전환
@@ -1131,7 +1185,7 @@ async function startSearch(keyword) {
     if(rn){ const ge=document.getElementById('graph'); rn.fx=(ge?.clientWidth||1200)/2; rn.fy=(ge?.clientHeight||700)/2; }
 
     const pcAbs=rootStats.pcVol||0, moAbs=rootStats.mobileVol||0;
-    renderStats(keyword, firstLevel);
+    renderStats(keyword, sortedFirst);
     renderTrendChart(trendResult?.trend||null, pcAbs, moAbs, trendResult?.lastTrendMonth||null);
     renderGenderAge(trendResult);
 
