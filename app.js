@@ -181,14 +181,20 @@ function fetchAutocomplete(keyword) {
   });
 }
 
-async function fetchNaverKeywords(keyword) {
+async function fetchNaverKeywords(keyword, strict = false) {
   try {
     const controller = new AbortController();
     const tid = setTimeout(() => controller.abort(), 10000);
     const r=await fetch('/api/keywords?keyword='+encodeURIComponent(keyword),{signal:controller.signal});
     clearTimeout(tid);
-    if(r.ok){const d=await r.json();if(d.keywords?.length>=2)return d.keywords;}
-  } catch(e){}
+    if(r.ok){
+      const d=await r.json();
+      if(d.keywords?.length>=2) return d.keywords;
+      // strict 모드: 자동완성 폴백 없이 Search Ads API 결과만 반환
+      // (연관키워드가 없는 키워드 검색 시 자동완성 결과로 잘못된 마인드맵 생성 방지)
+      if(strict) return d.keywords || [];
+    } else if(strict) return [];
+  } catch(e){ if(strict) return []; }
   try {const k=await fetchViaProxy(keyword);if(k.length>=2)return wrapStrings(k);} catch(e){}
   return wrapStrings(await fetchAutocomplete(keyword));
 }
@@ -1158,7 +1164,7 @@ async function startSearch(keyword) {
 
   try {
     const [firstLevel, trendResult] = await Promise.all([
-      fetchNaverKeywords(keyword),
+      fetchNaverKeywords(keyword, true), // strict: 자동완성 폴백 없이 Search Ads API 결과만 사용
       fetchTrend(keyword),
     ]);
 
