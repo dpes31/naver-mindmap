@@ -540,6 +540,14 @@ header.hidden { display: none; }
 .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.2; }
 .empty-title { font-size: 17px; font-weight: 700; color: var(--text); opacity: 0.28; margin-bottom: 6px; }
 .empty-sub { font-size: 13px; color: var(--muted); opacity: 0.6; }
+.kw-empty-notice {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px 16px; margin-top: 8px;
+  background: #f8f9fb; border-radius: 10px;
+  border: 1.5px dashed #d1d5db;
+  font-size: 13px; font-weight: 500; color: #9ca3af;
+}
+.kw-empty-icon { font-size: 15px; }
 
 /* ── 토스트 ── */
 #toast {
