@@ -181,14 +181,20 @@ function fetchAutocomplete(keyword) {
   });
 }
 
-async function fetchNaverKeywords(keyword) {
+async function fetchNaverKeywords(keyword, strict = false) {
   try {
     const controller = new AbortController();
     const tid = setTimeout(() => controller.abort(), 10000);
     const r=await fetch('/api/keywords?keyword='+encodeURIComponent(keyword),{signal:controller.signal});
     clearTimeout(tid);
-    if(r.ok){const d=await r.json();if(d.keywords?.length>=2)return d.keywords;}
-  } catch(e){}
+    if(r.ok){
+      const d=await r.json();
+      if(d.keywords?.length>=2) return d.keywords;
+      // strict 모드: 자동완성 폴백 없이 Search Ads API 결과만 반환
+      // (연관키워드가 없는 키워드 검색 시 자동완성 결과로 잘못된 마인드맵 생성 방지)
+      if(strict) return d.keywords || [];
+    } else if(strict) return [];
+  } catch(e){ if(strict) return []; }
   try {const k=await fetchViaProxy(keyword);if(k.length>=2)return wrapStrings(k);} catch(e){}
   return wrapStrings(await fetchAutocomplete(keyword));
 }
@@ -221,6 +227,10 @@ function renderStats(keyword, items) {
   const cards = [rootItem, ...top4];
 
   const maxVol = Math.max(...cards.map(d=>d.pcVol+d.mobileVol), 1);
+
+  if (top4.length === 0) {
+    wrap.innerHTML = '';
+  }
 
   cards.forEach((d, i) => {
     const pcPct  = Math.max(1, Math.round((d.pcVol / maxVol) * 100));
@@ -257,6 +267,14 @@ function renderStats(keyword, items) {
       </div>`;
     wrap.appendChild(card);
   });
+
+  // 연관 키워드가 없을 때 안내 메시지 표시
+  if (top4.length === 0) {
+    const notice = document.createElement('div');
+    notice.className = 'kw-empty-notice';
+    notice.innerHTML = `<span class="kw-empty-icon">🔍</span>연관키워드가 아직 없습니다`;
+    wrap.appendChild(notice);
+  }
 }
 
 // ── DataLab 상대지수 → 절대값 변환 ──────────────────
@@ -433,7 +451,8 @@ function renderGenderAge(data) {
             <span class="female-val">여 ${g.femaleMo}%</span>
           </div>
         </div>
-      </div>`;
+      </div>
+      <div class="ga-disclaimer">※ DataLab 상대지수 기반 추정치로 실제 수치와 다를 수 있습니다</div>`;
   } else {
     gs.innerHTML = `<div class="ga-title">성별 검색 비율</div>
       <div class="ga-placeholder">Vercel에 NAVER_DATALAB_CLIENT_ID / SECRET 입력 후 표시됩니다</div>`;
@@ -452,7 +471,8 @@ function renderGenderAge(data) {
             <div class="age-rank-label">${label}</div>
             <div class="age-rank-pct">${pct}%</div>
           </div>`).join('')}
-      </div>`;
+      </div>
+      <div class="ga-disclaimer">※ DataLab 상대지수 기반 추정치로 실제 수치와 다를 수 있습니다</div>`;
   } else {
     as.innerHTML = `<div class="ga-title">연령별 검색 비율</div>
       <div class="ga-placeholder">Vercel에 NAVER_DATALAB_CLIENT_ID / SECRET 입력 후 표시됩니다</div>`;
@@ -1133,7 +1153,14 @@ async function startSearch(keyword) {
   halosG.selectAll('*').remove();linksG.selectAll('*').remove();nodesG.selectAll('*').remove();
   
   if(infoPanelEl) infoPanelEl.classList.remove('visible');
-  if(emptyState) emptyState.classList.add('hidden');
+  if(emptyState) {
+    emptyState.classList.add('hidden');
+    // 새 검색 시 emptyState 문구를 초기값으로 복원
+    const et = emptyState.querySelector('.empty-title');
+    const es = emptyState.querySelector('.empty-sub');
+    if (et) et.textContent = '키워드를 검색하세요';
+    if (es) es.textContent = '네이버 연관 검색어를 마인드맵으로 시각화합니다';
+  }
   
   document.getElementById('kw-cards').innerHTML='';
   document.getElementById('trend-chart').innerHTML='';
@@ -1158,7 +1185,7 @@ async function startSearch(keyword) {
 
   try {
     const [firstLevel, trendResult] = await Promise.all([
-      fetchNaverKeywords(keyword),
+      fetchNaverKeywords(keyword, true), // strict: 자동완성 폴백 없이 Search Ads API 결과만 사용
       fetchTrend(keyword),
     ]);
 
@@ -1194,6 +1221,11 @@ async function startSearch(keyword) {
       showToast(`총 ${nodes.length}개 키워드 로드 완료`);
     } else {
       emptyState.classList.remove('hidden');
+      // 검색 후 연관키워드가 없는 경우 — 초기 안내 문구와 구분
+      const et = emptyState.querySelector('.empty-title');
+      const es = emptyState.querySelector('.empty-sub');
+      if (et) et.textContent = '연관키워드가 아직 없습니다';
+      if (es) es.textContent = '네이버 키워드 분석에 등록된 연관 검색어가 없는 키워드입니다';
       showToast('연관 검색어를 찾지 못했습니다. 다른 키워드를 시도해보세요.');
     }
   } catch(e) {
